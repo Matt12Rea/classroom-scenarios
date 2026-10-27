@@ -9,10 +9,10 @@ routes below.
 
 | | Route A: Render (managed) | Route B: your own Ubuntu server |
 |---|---|---|
-| Good for | Getting live quickly, no server to look after | Matches the SRS's Ubuntu server environment; full control |
-| You need | A GitHub account and a Render account (no technical setup) | A Linux server (school server, DigitalOcean, AWS Lightsail…) and a domain name |
+| Good for | Getting live quickly and free, no server to look after | Matches the SRS's Ubuntu server environment; full control |
+| You need | GitHub, Render and Neon accounts (all free, no technical setup) | A Linux server (school server, DigitalOcean, AWS Lightsail…) and a domain name |
 | HTTPS | Automatic | Automatic (Caddy + Let's Encrypt) |
-| Backups | Render's built-in recovery for paid databases | Nightly `pg_dump` to `./backups` (included) |
+| Backups | Neon keeps a short history you can restore from | Nightly `pg_dump` to `./backups` (included) |
 | Time | About 30 minutes, mostly waiting | About 30 minutes, needs command-line comfort |
 
 Before either route, get a **Claude API key**: sign in at the Anthropic Console,
@@ -30,19 +30,20 @@ You never log in to a server yourself. Render reads the `render.yaml` file in th
 project, which already describes everything the site needs, so most of the setup is
 clicking through screens.
 
-The whole process has three parts:
+The whole process has four parts, and all the hosting is free:
 
 1. Put the project on **GitHub**, so Render can read it.
-2. Ask **Render** to build the site from it.
-3. **Sign in** to your new site and finish setting it up.
+2. Create a free database on **Neon**.
+3. Ask **Render** to build the site from it.
+4. **Sign in** to your new site and finish setting it up.
 
 ### What you need before you start
 
 * The project folder. Unzip `aicss-website-v1.0.zip`; you'll get a folder called `aicss`.
 * A free GitHub account (github.com).
 * A Render account. You can sign up at render.com using your GitHub account, which also
-  connects the two. Running the site costs money each month: a small web service plus
-  a small database. Check Render's **Pricing** page for current prices before you start.
+  connects the two. The free plan is enough.
+* A Neon account for the free database (neon.com). Part 1b covers this.
 * Optionally, your Claude API key (see the start of this guide). You can add it later instead.
 
 ### Part 1: Put the project on GitHub
@@ -69,6 +70,24 @@ change the code on GitHub, Render rebuilds the site automatically.
 > does the same job: *File → Add local repository*, choose the `aicss` folder, then
 > *Publish repository* with **Keep this code private** ticked.
 
+### Part 1b: Create a free database on Neon
+
+The site needs a PostgreSQL database to store accounts, scenarios and conversations.
+`render.yaml` is set up to use a free one from [Neon](https://neon.com), which, unlike
+Render's free database, isn't deleted after 30 days.
+
+1. Sign up at neon.com (you can sign in with GitHub).
+2. Create a project. Name it `classroom-scenarios` and pick the region closest to you
+   (for example a US East or US Central region). Leave the other settings as they are.
+3. On the project's dashboard, click **Connect**. Neon shows a **connection string**
+   that starts with `postgresql://` and ends with something like `?sslmode=require`.
+4. Copy the whole string and keep it somewhere safe for the next part. It contains the
+   database password, so don't share it or put it in GitHub.
+
+The free database pauses itself after a few minutes without use and wakes up in under a
+second when the site needs it. It holds 1 GB, which is plenty for a school's scenarios
+and conversations.
+
 ### Part 2: Create the site on Render
 
 1. Sign in at dashboard.render.com.
@@ -78,22 +97,23 @@ change the code on GitHub, Render rebuilds the site automatically.
    `classroom-scenarios` repository. Then select that repository.
 4. Give the Blueprint a name (for example `classroom-scenarios`). Render reads
    `render.yaml` and shows what it will create:
-   * **classroomscenarios**, a web service. This is the website.
-   * **aicss-db**, a PostgreSQL database. This stores accounts, scenarios and conversations.
-5. Render then asks you to fill in three values. These are kept secret on Render and
+   * **classroomscenarios**, a free web service. This is the website.
+5. Render then asks you to fill in four values. These are kept secret on Render and
    are never stored in your code:
 
    | Setting | What to enter |
    |---|---|
+   | `DATABASE_URL` | The Neon connection string from Part 1b. |
    | `ANTHROPIC_API_KEY` | Your Claude API key, starting `sk-ant-`. You can leave it empty and add it from the site later; until then characters give canned demo replies. |
    | `ADMIN_EMAIL` | Your email address. It becomes the first administrator account. |
    | `ADMIN_PASSWORD` | A temporary password of at least 8 characters, mixing letters with numbers or symbols. You'll replace it the first time you sign in. |
 
+   If Render shows a plan or instance type, make sure it says **Free**.
+
    The other settings are filled in automatically. Render generates `SECRET_KEY` (a long
    random value used to keep sign-ins secure) by itself. Never change it afterwards: doing
    so signs everyone out and makes a key saved from the site unreadable.
-6. Confirm to create the resources. Render creates the database first, then builds the
-   website. The first build takes several minutes, because Render is building the whole
+6. Confirm to create the resources. Render builds the website. The first build takes several minutes, because Render is building the whole
    app from scratch.
 7. Open **classroomscenarios** in your Render dashboard and watch the **Events** or **Logs** tab.
    When the status changes to **Live**, the site is running.
@@ -143,12 +163,32 @@ scenarios and conversations are in the database, so they're kept across updates.
 * **I can't sign in as the administrator.** In **classroomscenarios → Logs**, search for
   `first administrator`. If your `ADMIN_PASSWORD` was too short or too simple, the app made
   a temporary password instead and wrote it in that log line.
-* **The site is slow to open after a quiet period.** The web service is on Render's
-  free plan, which sleeps when idle. Choose a paid instance type in **classroomscenarios → Settings**.
+* **The site takes about a minute to open after a quiet period.** That's the free plan:
+  it sleeps after 15 minutes without visitors. Open the site a minute or two before a class
+  starts. To stop it sleeping, choose a paid instance type in **classroomscenarios → Settings**.
+* **The build log says it can't connect to the database.** Check `DATABASE_URL` in
+  **classroomscenarios → Environment**: it must be the complete Neon string, starting with
+  `postgresql://`.
 * **Characters only give canned replies.** No API key is set. Add one in **AI connection**.
 
-> Render's free database is only for trying things out: it's removed after a limited
-> period. `render.yaml` uses the smallest paid database so student data is kept.
+### What it costs
+
+| Part | Cost |
+|---|---|
+| Website on Render (free plan) | Free. Sleeps after 15 minutes idle; 750 free hours a month, which covers one site running all month. |
+| Database on Neon (free plan) | Free. 1 GB of storage; doesn't expire. |
+| `onrender.com` address and HTTPS | Free |
+| Your own domain (optional) | Whatever your domain registrar charges; often the school already has one |
+| Claude API | Pay per use, billed by Anthropic. Demo mode (no key) costs nothing. |
+
+The only part that can't be free is Claude itself: each character reply is a small
+charge on your Anthropic account. The Haiku model the site uses by default is the
+cheapest. To keep spending predictable, set a monthly spend limit in the Anthropic
+Console. Without a key, the site still works in demo mode with canned replies, which
+is fine for showing it to people.
+
+If you later need the site to be always awake (for example, many classes using it every
+day), change `plan: free` to `plan: 0.5c-512mb` in `render.yaml`.
 
 ---
 
