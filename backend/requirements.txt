@@ -1,0 +1,10 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+pyjwt>=2.8
+anthropic>=0.40
+cryptography>=42          # encrypts the API key when it's saved from the admin dashboard
+psycopg[binary]>=3.2      # PostgreSQL driver (production database)
+# tests:
+pytest>=8
+httpx>=0.27

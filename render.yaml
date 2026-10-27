@@ -1,0 +1,34 @@
+# One-click hosting on Render (render.com): New > Blueprint > pick this repository.
+# Creates the web service and a PostgreSQL database, with HTTPS on a
+# *.onrender.com address (add your own domain in the service's Settings).
+services:
+  - type: web
+    name: classroomscenarios
+    runtime: docker
+    plan: 0.5c-512mb         # smallest paid size; "free" works for trying it but sleeps when idle
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aicss-db
+          property: connectionString
+      - key: RATE_LIMIT_BACKEND
+        value: db
+      - key: ANTHROPIC_API_KEY
+        sync: false          # you'll be asked for it; or add it later in Admin > AI connection
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-haiku-5-5
+
+databases:
+  - name: aicss-db
+    plan: 0.1c-256mb         # smallest paid database; "free" is for trying it out only
+    databaseName: aicss
+    user: aicss

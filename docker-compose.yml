@@ -1,0 +1,67 @@
+# Production on your own server (any Ubuntu VPS with Docker):
+#   1. Point your domain's DNS A record at the server.
+#   2. cp .env.production.example .env   and fill it in.
+#   3. docker compose up -d --build
+# Caddy obtains and renews the HTTPS certificate automatically.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://aicss:${POSTGRES_PASSWORD}@db:5432/aicss
+      RATE_LIMIT_BACKEND: db
+    depends_on:
+      db:
+        condition: service_healthy
+    expose: ["8000"]
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aicss
+      POSTGRES_USER: aicss
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aicss"]
+      interval: 5s
+      retries: 10
+
+  # Nightly database backups, kept for 14 days (NFR-5.4.6). Copy ./backups off the
+  # server too (e.g. rclone to cloud storage) so a lost server doesn't lose them.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    depends_on: [db]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          pg_dump -h db -U aicss -Fc aicss > /backups/aicss-$$(date +%Y%m%d-%H%M).dump \
+            && find /backups -name 'aicss-*.dump' -mtime +14 -delete
+          sleep 86400
+        done
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [app]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
