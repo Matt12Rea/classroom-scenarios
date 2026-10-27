@@ -46,6 +46,15 @@ LOGIN_RATE_LIMIT = (8, 300)          # 8 attempts per 5 minutes per email+IP
 # temporary: the admin must choose a new one at first sign-in.
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+# Emergency reset: when true, the ADMIN_EMAIL account's password is set back to
+# ADMIN_PASSWORD on every start. Turn it on, restart, sign in, then turn it off.
+ADMIN_RESET_PASSWORD = _bool("ADMIN_RESET_PASSWORD", False)
+
+# ---- demo school ------------------------------------------------------------
+# LOAD_DEMO_DATA=true adds sample accounts for every role, classes, scenarios and
+# activity on start-up (once). For showing the site to people, not for real use.
+LOAD_DEMO_DATA = _bool("LOAD_DEMO_DATA", False)
+DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "") or "demo-pass-1"
 
 # ---- AI engine ------------------------------------------------------------
 # These environment values are the defaults. An administrator can override the

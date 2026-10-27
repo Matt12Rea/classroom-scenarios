@@ -15,7 +15,10 @@ from app.models import (Assignment, Classroom, Decision, Enrollment, Flag, Messa
 from app.scenario_schema import EXAMPLE, normalize
 from app.security import hash_password, temp_password
 
-DEMO_PW = "demo-pass-1"
+import os
+
+# Shared password for every demo account. Set DEMO_PASSWORD to choose your own.
+DEMO_PW = os.getenv("DEMO_PASSWORD", "") or "demo-pass-1"
 
 CASE = normalize({
     "setting": "A Grade 10 chemistry lab. You are the lab partner of Sam, who skipped the safety briefing.",

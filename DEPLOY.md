@@ -106,7 +106,7 @@ and conversations.
    | `DATABASE_URL` | The Neon connection string from Part 1b. |
    | `ANTHROPIC_API_KEY` | Your Claude API key, starting `sk-ant-`. You can leave it empty and add it from the site later; until then characters give canned demo replies. |
    | `ADMIN_EMAIL` | Your email address. It becomes the first administrator account. |
-   | `ADMIN_PASSWORD` | A temporary password of at least 8 characters, mixing letters with numbers or symbols. You'll replace it the first time you sign in. |
+   | `ADMIN_PASSWORD` | A temporary password for your first sign-in. You'll be asked to replace it straight away with one of at least 8 characters, mixing letters with numbers or symbols. |
 
    If Render shows a plan or instance type, make sure it says **Free**.
 
@@ -139,6 +139,30 @@ and conversations.
    temporary password to give them, and chooses their own at first sign-in.
 5. Teachers can then sign in, create classes, build scenarios and assign them.
 
+### Adding demo accounts (optional)
+
+To show the site to people, you can load a ready-made demo school: an account for every
+role, three classes, two scenarios and some sample student activity (including a couple
+of safety flags to review).
+
+1. In **classroomscenarios → Environment**, add `LOAD_DEMO_DATA` with the value `true`.
+2. Optionally add `DEMO_PASSWORD` with a password of your choice for all the demo
+   accounts. If you don't, they use `demo-pass-1`.
+3. Save. Render restarts the site and adds the demo school once. Leaving the setting on
+   doesn't add it again.
+
+| Role | Email |
+|---|---|
+| Administrator | `admin@demo.school` |
+| Teacher | `teacher@demo.school` (and `teacher2@demo.school`) |
+| Student | `student@demo.school` (and seven more, such as `leo@demo.school`) |
+| IT support | `it@demo.school` |
+
+Demo accounts don't have to change their password at sign-in, so anyone who knows the
+demo password can sign in, including as the demo administrator. Before real students use
+the site, disable the demo accounts in **Users and roles** (select them, then **Disable**),
+or keep demos on a separate Render site.
+
 ### Using your school's own web address (optional)
 
 To use an address like `scenarios.yourschool.edu` instead of `onrender.com`:
@@ -160,9 +184,11 @@ scenarios and conversations are in the database, so they're kept across updates.
 * **The build failed.** Open **classroomscenarios → Logs** and read the last red lines. The most common
   cause is that the files were uploaded inside an extra folder, so Render can't find the
   `Dockerfile`. Check Part 1, step 6.
-* **I can't sign in as the administrator.** In **classroomscenarios → Logs**, search for
-  `first administrator`. If your `ADMIN_PASSWORD` was too short or too simple, the app made
-  a temporary password instead and wrote it in that log line.
+* **I can't sign in as the administrator.** In **classroomscenarios → Environment**, add a
+  variable `ADMIN_RESET_PASSWORD` with the value `true`, check that `ADMIN_EMAIL` and
+  `ADMIN_PASSWORD` are what you expect, and save. Render restarts the site and resets that
+  account's password to `ADMIN_PASSWORD`. Sign in, choose your new password, then
+  **delete `ADMIN_RESET_PASSWORD`** (otherwise the password is reset on every restart).
 * **The site takes about a minute to open after a quiet period.** That's the free plan:
   it sleeps after 15 minutes without visitors. Open the site a minute or two before a class
   starts. To stop it sleeping, choose a paid instance type in **classroomscenarios → Settings**.
@@ -292,7 +318,10 @@ Point an uptime monitor (UptimeRobot, Better Stack, etc.) at
 | `AI_MODE` | automatic | `mock` forces demo replies; blank uses Claude when a key exists |
 | `AI_MAX_RETRIES` | `2` | Automatic retries for temporary AI errors |
 | `AI_TIMEOUT_SECONDS` | `20` | Give up on a single AI request after this long |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | | Creates the first administrator if none exists |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | | Creates the first administrator if none exists (the password is temporary) |
+| `LOAD_DEMO_DATA` | off | `true` adds the demo school (accounts for every role plus sample data) once |
+| `DEMO_PASSWORD` | `demo-pass-1` | Password for all demo accounts |
+| `ADMIN_RESET_PASSWORD` | off | `true` resets the `ADMIN_EMAIL` account's password to `ADMIN_PASSWORD` on start. Remove it after use. |
 | `SESSION_TIMEOUT_MINUTES` | `60` | Inactive users are signed out (NFR-5.3.5) |
 | `FORCE_HTTPS` | on in production | Redirect HTTP to HTTPS and send HSTS |
 | `RATE_LIMIT_BACKEND` | `db` in production | Shares rate limits between server processes |
@@ -303,7 +332,7 @@ Point an uptime monitor (UptimeRobot, Better Stack, etc.) at
 
 - [ ] `APP_ENV=production` and a long random `SECRET_KEY`
 - [ ] Site opens on `https://` and `http://` redirects to it
-- [ ] Demo accounts are **not** loaded (`seed.py --demo` is for trying the app only)
+- [ ] Demo accounts are disabled, or were never loaded (`LOAD_DEMO_DATA` is for showing the site only)
 - [ ] First admin has changed the temporary password
 - [ ] Auto-reload and a spend limit are set in the Anthropic Console
 - [ ] Backups are running and you've tried restoring one

@@ -62,40 +62,75 @@ async def https_and_headers(request: Request, call_next):
 
 def bootstrap_admin():
     """Create the first administrator from ADMIN_EMAIL / ADMIN_PASSWORD when the
-    database has none. Lets you set up a hosted site without shell access."""
+    database has none, so a hosted site can be set up without shell access.
+
+    ADMIN_PASSWORD is only a temporary password: the admin must choose a new one
+    (which does have to meet the password rules) at first sign-in.
+
+    Locked out? Set ADMIN_RESET_PASSWORD=true and restart: the ADMIN_EMAIL account's
+    password is reset to ADMIN_PASSWORD (again temporary). Then remove the setting."""
     if not config.ADMIN_EMAIL:
         return
-    from .models import User
-    from .security import hash_password, temp_password, validate_new_password
+    from .models import User, audit
+    from .security import hash_password, temp_password
     db = SessionLocal()
     try:
-        if db.scalar(select(User.id).where(User.role == "admin").limit(1)):
-            return
-        pw = config.ADMIN_PASSWORD
-        try:
-            if pw:
-                validate_new_password(pw)
-        except Exception:
-            log.error("ADMIN_PASSWORD is too weak; generating a temporary one instead.")
-            pw = ""
-        generated = not pw
-        pw = pw or temp_password()
         existing = db.scalar(select(User).where(User.email == config.ADMIN_EMAIL))
+        any_admin = db.scalar(select(User.id).where(User.role == "admin").limit(1))
+        reset = config.ADMIN_RESET_PASSWORD
+        if any_admin and not reset:
+            return
+        pw = config.ADMIN_PASSWORD or temp_password()
         if existing:
             existing.role, existing.active = "admin", True
+            existing.password_hash, existing.must_change_password = hash_password(pw), True
+            existing.token_version += 1
+            audit(db, None, "admin.bootstrap_reset", f"user:{existing.id}", email=config.ADMIN_EMAIL)
+            action = "Reset the password for administrator"
         else:
-            db.add(User(name="Administrator", email=config.ADMIN_EMAIL, role="admin",
-                        password_hash=hash_password(pw), must_change_password=True))
+            u = User(name="Administrator", email=config.ADMIN_EMAIL, role="admin",
+                     password_hash=hash_password(pw), must_change_password=True)
+            db.add(u)
+            db.flush()
+            audit(db, None, "admin.bootstrap_create", f"user:{u.id}", email=config.ADMIN_EMAIL)
+            action = "Created first administrator"
         db.commit()
-        log.warning("Created first administrator %s.%s", config.ADMIN_EMAIL,
-                    f" Temporary password: {pw}" if generated and not existing else
-                    " Sign in with ADMIN_PASSWORD; you'll be asked to choose a new one.")
+        log.warning("%s %s. %s", action, config.ADMIN_EMAIL,
+                    "Sign in with ADMIN_PASSWORD; you'll be asked to choose a new password."
+                    if config.ADMIN_PASSWORD else f"Temporary password: {pw}")
+        if reset:
+            log.warning("ADMIN_RESET_PASSWORD is on. Remove it now, or the password is reset "
+                        "again every time the site restarts.")
+    finally:
+        db.close()
+
+
+def load_demo_data():
+    """LOAD_DEMO_DATA=true: add the demo school once (accounts for every role, classes,
+    scenarios and sample activity). Does nothing if it's already there."""
+    if not config.LOAD_DEMO_DATA:
+        return
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import seed
+    from .models import User
+    db = SessionLocal()
+    try:
+        if db.scalar(select(User.id).where(User.email == "admin@demo.school")):
+            return
+        seed.demo(db)
+        log.warning("Loaded the demo school. Demo accounts: admin@demo.school, teacher@demo.school, "
+                    "student@demo.school, it@demo.school (password: DEMO_PASSWORD, or demo-pass-1 if unset).")
+    except Exception:
+        db.rollback()
+        log.exception("Couldn't load the demo school")
     finally:
         db.close()
 
 
 init_db()
 bootstrap_admin()
+load_demo_data()
 
 
 @app.exception_handler(Exception)
