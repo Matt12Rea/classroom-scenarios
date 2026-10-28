@@ -4,7 +4,7 @@ Role-play scenarios for students, built by teachers, overseen by administrators.
 Claude voices the characters. The application decides how a scenario progresses and ends.
 
 ```
-aicss/
+AICSG/
 ├── backend/            FastAPI + SQLAlchemy (SQLite in dev, PostgreSQL-ready)
 │   ├── app/
 │   │   ├── main.py             app setup, error handling, serves the built frontend
