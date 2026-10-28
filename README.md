@@ -84,7 +84,7 @@ See **[DEPLOY.md](DEPLOY.md)**. In short:
 * The Claude key can be set as `ANTHROPIC_API_KEY` or added later in **Admin → AI connection**,
   where it's tested, stored encrypted, and can be replaced without a redeploy.
 
-## How the pieces fit
+## Pipeline
 
 **Student flow (UC-02/03/04).** `POST /api/sessions` starts the scenario, or resumes it if one is already in progress, so progress is never lost. Each message goes through these steps:
 
@@ -119,22 +119,7 @@ saved, encrypted with a key derived from `SECRET_KEY`, and shown afterwards only
 Each AI call records success or the kind of failure (invalid key, out of credit, rate limit, outage),
 so administrators see what's wrong without reading server logs.
 
-## What changed from the original `engine.py`
 
-| Original | Now |
-|---|---|
-| Placeholder auth: any `Bearer admin:1` header was trusted | Real accounts: hashed passwords (PBKDF2, 600k rounds), signed expiring tokens, a database check on every request so disabling a user or changing a password takes effect immediately |
-| `sqlite3` connections opened per call and never closed | SQLAlchemy session per request; switching to PostgreSQL is a config change |
-| Students could start any scenario by id, including drafts | Only published scenarios assigned to one of their classes |
-| Every start created a new session | Resumes the in-progress attempt; "Try again" starts a fresh one |
-| Bad scenario JSON caused a `KeyError` (500) | Full validation with field-level messages; publishing blocked until clean |
-| Fallback line hard-coded to "Jordan" | Uses whichever character is speaking |
-| No moderation (TODO) | Input and output screening, admin queue, escalation after repeated flags |
-| One character, no teacher endpoints | Several characters per scenario, scene-level speakers, full authoring API |
-| Editing a scenario could break running sessions | Sessions keep a snapshot |
-| No CORS, no static serving | Both, plus a JSON error handler that doesn't leak internals |
-
-The original scenario JSON format still loads; `scenario_schema.normalize()` converts it.
 
 ## Known gaps / next steps
 
