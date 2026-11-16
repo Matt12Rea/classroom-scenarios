@@ -32,7 +32,7 @@ export function Login() {
           </form>
           <aside className="login-about">
             <Logo size={56} className="crest" />
-            <h2>Practise the conversations your discipline depends on.</h2>
+            <h2>AI Driven Classroom Scenarios.</h2>
             <p>Role-plays written by your instructors, where you put course material to work: advise a bank on interest-rate risk, defend a study to an ethics board, explain a genetic test result.</p>
           </aside>
         </div>
