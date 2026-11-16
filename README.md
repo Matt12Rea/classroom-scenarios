@@ -1,7 +1,9 @@
 # AI Classroom Scenario System
 
-Role-play scenarios for students, built by teachers, overseen by administrators.
-Claude voices the characters. The application decides how a scenario progresses and ends.
+Role-play scenarios for university students, built by instructors, overseen by administrators.
+Claude voices the characters. Students move through a scenario by what they say, not by clicking
+choices: a separate Claude call judges which of the instructor's paths the student has taken, and the
+application makes the move.
 
 ```
 AICSG/
@@ -19,7 +21,7 @@ AICSG/
 │   │   ├── ai.py               the only module that talks to Claude (+ demo/mock engine)
 │   │   ├── settings_store.py   AI key/model set from the dashboard (encrypted), AI health
 │   │   └── routers/            auth, play (student), teacher, admin, system (AI connection)
-│   ├── seed.py                 first admin account, or a demo school
+│   ├── seed.py                 first admin account, or a demo university
 │   └── tests/test_api.py       end-to-end tests (no API key needed)
 ├── frontend/           React (Vite). No UI libraries, no router dependency.
 │   ├── src/App.jsx             role-based navigation and routes
@@ -47,7 +49,7 @@ running it on your own computer while developing.
 cd backend
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python seed.py --demo                 # demo school; every demo password is demo-pass-1
+python seed.py --demo                 # demo university; every demo password is demo-pass-1
 export ANTHROPIC_API_KEY=sk-ant-...   # leave unset to use canned "demo mode" replies
 export SECRET_KEY=$(python -c "import secrets;print(secrets.token_urlsafe(48))")
 uvicorn app.main:app --reload
@@ -57,7 +59,10 @@ Open http://localhost:8000. The backend serves `frontend/dist`, so this alone gi
 (The prebuilt `dist` uses your computer's system font; `npm run build` and the Docker image bundle the
 Public Sans and Source Serif 4 fonts.)
 
-Demo accounts: `admin@demo.school`, `teacher@demo.school`, `student@demo.school`, `it@demo.school`.
+Demo accounts: `admin@demo.school`, `teacher@demo.school` (an instructor), `student@demo.school`, `it@demo.school`.
+The demo includes three published, course-based scenarios (ECON 210: advising a community bank on interest-rate
+risk; PSYC 310: defending a deception study to the IRB; BIOL 340: explaining a cystic fibrosis carrier result)
+and a draft (HIST: the 1787 representation deadlock).
 Each uses the password `demo-pass-1`.
 
 **Frontend, when you're changing it** (Node 18+):
@@ -80,7 +85,7 @@ See **[DEPLOY.md](DEPLOY.md)**. In short:
 * `APP_ENV=production` refuses to start without a strong `SECRET_KEY`, redirects HTTP to HTTPS,
   sends HSTS and security headers, and hides the API docs.
 * The first administrator is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` on first start
-  (or with `python seed.py --admin you@school.edu`).
+  (or with `python seed.py --admin you@university.edu`).
 * The Claude key can be set as `ANTHROPIC_API_KEY` or added later in **Admin → AI connection**,
   where it's tested, stored encrypted, and can be replaced without a redeploy.
 
@@ -89,11 +94,22 @@ See **[DEPLOY.md](DEPLOY.md)**. In short:
 **Student flow (UC-02/03/04).** `POST /api/sessions` starts the scenario, or resumes it if one is already in progress, so progress is never lost. Each message goes through these steps:
 
 1. The message is screened (`moderation.screen_input`). Self-harm language stops the AI call, shows support resources and raises a serious flag. Baiting attempts are flagged but still answered in character.
-2. Claude replies, given the scenario's static rules plus the current scene, the decisions made so far and the last 10 exchanges.
+2. Claude replies, given the scenario's static rules plus the current scene, how the student's approach has moved the scenario so far, and the last 10 exchanges.
+   At the same time (once the scene's minimum number of messages is met), a second Claude call, the *judge*, reads the scene's conversation and returns which of the scene's paths, if any, the student has clearly taken, with a confidence and a one-line reason (`ai.judge_request`, `ai.parse_judgement`).
 3. The reply is screened (`screen_output`). A reply that breaks character or is inappropriate is replaced with a neutral line, and the original goes to the admin queue.
 4. Optionally, Claude re-reviews the exchange in the background (`MODERATION_AI_REVIEW`). This adds no delay for the student.
 
-Decisions are plain application logic. Each scene can require N messages before its decisions unlock.
+**Scene progression.** There are no decision buttons. Each path in a scene has a name (shown to the student when it's taken, e.g.
+"Explained the bank's interest-rate risk") and a *signal*: what the student says or does to take it. The judge can only pick from those paths;
+the application checks the pick, records it in `decisions`, and moves the student on. A scene moves on when:
+
+* the judge picks a path with confidence ≥ `JUDGE_CONFIDENCE` (default 0.6) after the scene's `min_turns`, or
+* the scene reaches its `wrap_after` limit (default 8 messages), when the judge must pick the closest path, or
+* the student uses the scenario's last message, when every remaining scene takes its closest path until an ending.
+
+Students never see the paths or the judge's reasoning. Instructors see both: in Preview (an "Instructor view" panel under the
+message box) and in students' transcripts ("Why the scene moved on"). In demo mode (no API key) the judge matches words
+between the student's messages and each path, so you can still click through every screen.
 When a student reaches an ending, the teacher's ending feedback is shown alongside a short personalised debrief from Claude, guided by the teacher's notes.
 
 **Scenario snapshot.** A session stores a copy of the scenario as it was when the student started, so a teacher can edit a live scenario without breaking attempts already in progress.

@@ -64,8 +64,9 @@ class CreateReq(ScenarioIn):
 def create_scenario(req: CreateReq, user: User = Depends(require("teacher", "admin")),
                     db: Session = Depends(get_db)):           # REQ-3.1.1
     if req.template == "example":
-        d, title = EXAMPLE, req.title or "Hallway conflict (example)"
-        desc = req.description or "Help a frustrated classmate who thinks a grade was unfair."
+        d, title = EXAMPLE, req.title or "Prairie State Bank: the fixed-rate question (example)"
+        desc = req.description or ("Advise a community bank's president whether to write 30-year fixed-rate "
+                                   "mortgages as the Fed raises rates.")
     else:
         d = normalize(req.definition) if req.definition else normalize({
             "boundaries": DEFAULT_BOUNDARIES, "characters": [], "start": "scene_1",
@@ -178,7 +179,7 @@ def assign(scenario_id: int, req: AssignReq, user: User = Depends(staff), db: Se
     sc = get_scenario_for_edit(db, user, scenario_id)
     cl = db.get(Classroom, req.class_id)
     if not cl or (user.role == "teacher" and cl.teacher_id != user.id):
-        raise HTTPException(404, "Class not found.")
+        raise HTTPException(404, "Course not found.")
     if sc.status != "published":
         raise HTTPException(409, "Publish the scenario before assigning it.")
     a = db.scalar(select(Assignment).where(Assignment.scenario_id == sc.id, Assignment.class_id == cl.id))
@@ -212,7 +213,7 @@ def class_out(db: Session, cl: Classroom) -> dict:
 def _class_for_edit(db, user, class_id) -> Classroom:
     cl = db.get(Classroom, class_id)
     if not cl or (user.role == "teacher" and cl.teacher_id != user.id):
-        raise HTTPException(404, "Class not found.")
+        raise HTTPException(404, "Course not found.")
     return cl
 
 
@@ -235,7 +236,7 @@ def create_class(req: ClassReq, user: User = Depends(staff), db: Session = Depen
     if teacher_id:
         t = db.get(User, teacher_id)
         if not t or t.role != "teacher":
-            raise HTTPException(422, "Choose a teacher account for this class.")
+            raise HTTPException(422, "Choose an instructor account for this course.")
     cl = Classroom(name=req.name.strip(), teacher_id=teacher_id)
     db.add(cl)
     db.flush()
@@ -251,7 +252,7 @@ def update_class(class_id: int, req: ClassReq, user: User = Depends(staff), db: 
     if user.role == "admin" and req.teacher_id is not None:
         t = db.get(User, req.teacher_id)
         if not t or t.role != "teacher":
-            raise HTTPException(422, "Choose a teacher account for this class.")
+            raise HTTPException(422, "Choose an instructor account for this course.")
         cl.teacher_id = req.teacher_id
     audit(db, user, "class.update", f"class:{cl.id}", name=cl.name, teacher_id=cl.teacher_id)
     db.commit()
@@ -390,7 +391,7 @@ def export_csv(scenario_id: int, class_id: int | None = None,
     sessions = _filtered_sessions(db, sc.id, class_id, date_from, date_to, list(roster))
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["student", "email", "class", "attempt", "status", "outcome", "outcome_type", "messages",
+    w.writerow(["student", "email", "course", "attempt", "status", "outcome", "outcome_type", "messages",
                 "decisions", "started", "completed"])
     for s in sessions:
         u, cname = roster[s.student_id]

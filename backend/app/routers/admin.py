@@ -190,7 +190,7 @@ def delete_user(user_id: int, user: User = Depends(admin), db: Session = Depends
     if u.id == user.id:
         raise HTTPException(409, "You can't delete your own account.")
     if db.scalar(select(Scenario.id).where(Scenario.owner_id == u.id).limit(1)):
-        raise HTTPException(409, "This teacher owns scenarios. Disable the account instead, "
+        raise HTTPException(409, "This instructor owns scenarios. Disable the account instead, "
                                  "or transfer the scenarios first.")
     audit(db, user, "user.delete", f"user:{u.id}", email=u.email)
     db.delete(u)

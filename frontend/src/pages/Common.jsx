@@ -28,21 +28,21 @@ export function Login() {
             <Field label="Email address">{(id) => <input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
             <Field label="Password">{(id) => <input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
             <button className="btn primary block" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-            <p className="small muted">Forgot your password? Your teacher or school administrator can reset it.</p>
+            <p className="small muted">Forgot your password? Your instructor or site administrator can reset it.</p>
           </form>
           <aside className="login-about">
             <h2>About this service</h2>
-            <p>Classroom Scenarios lets students practise difficult conversations and decisions in realistic situations written by their teachers.</p>
+            <p>Classroom Scenarios lets university students apply what they're learning in realistic role-plays written by their instructors: advising a bank on interest-rate risk, defending a study to an ethics board, explaining a genetic test result.</p>
             <dl>
-              <dt>Students</dt><dd>talk with characters, choose what to do, and get feedback on the outcome.</dd>
-              <dt>Teachers</dt><dd>write scenarios, assign them to classes and review each student's path.</dd>
+              <dt>Students</dt><dd>talk with AI characters in their own words. What they say shapes where the scenario goes, and they get feedback on the outcome.</dd>
+              <dt>Instructors</dt><dd>write scenarios, assign them to courses and review each student's conversation.</dd>
               <dt>Administrators</dt><dd>manage accounts and review anything flagged by safety checks.</dd>
             </dl>
           </aside>
         </div>
       </main>
       <footer className="login-foot">
-        <span>Conversations are stored for teaching and safety review. Names and email addresses are never sent to the AI service.</span>
+        <span>Conversations are stored for instruction and safety review. Names and email addresses are never sent to the AI service.</span>
       </footer>
     </div>
   );
@@ -90,11 +90,11 @@ export function StudentHome() {
   const first = user.name.split(" ")[0];
   return (
     <div className="page">
-      <PageHead title="My scenarios" sub={`Welcome, ${first}. These are the scenarios your teachers have assigned. Read the brief, talk with the characters, then decide what to do.`} />
+      <PageHead title="My scenarios" sub={`Welcome, ${first}. These are the scenarios your instructors have assigned. Read the brief, then handle the situation in your own words.`} />
       <ErrorBanner error={error || err} onRetry={error ? reload : null} />
       {loading && <Loading />}
       {data && data.length === 0 && (
-        <Empty title="Nothing assigned yet">When a teacher assigns you a scenario it will appear here.</Empty>
+        <Empty title="Nothing assigned yet">When an instructor assigns you a scenario it will appear here.</Empty>
       )}
       {data?.length > 0 && (
         <div className="assignments">
@@ -140,9 +140,9 @@ export function Help() {
         <h2>Playing a scenario</h2>
         <ol>
           <li>Open a scenario from <a href="/">My scenarios</a> and read the setting and your goals.</li>
-          <li>Type to the character the way you would talk to a real person. Enter sends your message.</li>
-          <li>When you're ready, pick a decision under “What do you do?”. Some scenes ask you to talk first.</li>
-          <li>Your decisions lead to different endings. At the end you'll see feedback and can try again.</li>
+          <li>Type to the character the way you would talk to a real person. Enter sends your message. You can describe actions too, for example “I sketch a Punnett square for them.”</li>
+          <li>There are no buttons to choose from. When your approach is clear, the scenario moves to the next scene and shows what it took from what you said.</li>
+          <li>Different approaches lead to different endings. Each scenario has a message limit; when you reach it, the scenario wraps up based on the conversation so far. At the end you'll see feedback and can try again.</li>
         </ol>
         <p>If a character says something upsetting or inappropriate, hover over the message and choose Report.</p>
       </>}
@@ -151,12 +151,15 @@ export function Help() {
         <ol>
           <li><b>Basics</b>: title, setting and what students should learn.</li>
           <li><b>Characters</b>: who the AI plays. Personality notes shape how they react.</li>
-          <li><b>Scenes</b>: each scene is a situation. Add decisions that lead to other scenes, or mark the scene as an ending (success, partial or didn't succeed).</li>
-          <li><b>Review &amp; publish</b>: check the map, fix anything flagged, preview it yourself, publish, then assign it to a class.</li>
+          <li><b>Scenes</b>: each scene is a situation. Add paths that lead to other scenes, and for each path describe what the student says or does to take it. Or mark the scene as an ending (success, partial or didn't succeed).</li>
+          <li><b>Review &amp; publish</b>: check the map, fix anything flagged, preview it yourself, publish, then assign it to a course.</li>
         </ol>
-        <p>The AI only voices characters. It never decides which scene comes next or how the scenario ends; your decisions and endings do.</p>
+        <h2>How scenes move on</h2>
+        <p>Students never see the paths. After each message, a separate AI check reads the scene's conversation and decides whether the student's own words show they've taken one of your paths. It can only pick from the paths you wrote, and the app makes the move, so the scenario always follows your structure. A scene can't move on before its minimum number of messages, and when it reaches its wrap-up limit (or the student runs out of messages), the closest path is taken.</p>
+        <p>When you preview a scenario, an instructor panel under the message box shows the current scene's paths, and each scene change shows why the AI matched it. You see the same notes in students' conversations; students don't.</p>
+        <p>The character never decides the outcome, and never lists options for the student.</p>
         <h2>Results</h2>
-        <p>Open a scenario's Results to see who has started and finished, which endings students reached, which decisions were popular, and each student's full conversation. Export downloads a CSV.</p>
+        <p>Open a scenario's Results to see who has started and finished, which endings students reached, which paths their conversations took, and each student's full conversation. Export downloads a CSV.</p>
       </>}
       {user.role === "admin" && <>
         <h2>Safety review</h2>
@@ -164,7 +167,7 @@ export function Help() {
         <h2>Accounts</h2>
         <p>Create accounts one at a time or import a list. New accounts get a temporary password and must choose their own at first sign-in.</p>
         <h2>AI connection</h2>
-        <p>Characters are voiced by Claude through your school's API key. Open <a href="/ai">AI connection</a> to add or replace the key, choose the model, or switch to demo mode. The key is tested before it's saved, stored encrypted, and can't be viewed again. If replies stop working, that page explains why, for example when the account needs more credit.</p>
+        <p>Characters are voiced by Claude through your institution's API key. Open <a href="/ai">AI connection</a> to add or replace the key, choose the model, or switch to demo mode. The key is tested before it's saved, stored encrypted, and can't be viewed again. If replies stop working, that page explains why, for example when the account needs more credit.</p>
       </>}
       {user.role === "it_support" && <>
         <h2>System status</h2>
@@ -172,7 +175,7 @@ export function Help() {
         <p>Student conversations aren't visible to IT support.</p>
       </>}
       <h2>Privacy</h2>
-      <p>Conversations are stored so teachers can give feedback. Only the student, their teachers and school administrators can read them. Messages are sent to the AI service to generate replies; names and emails are not.</p>
+      <p>Conversations are stored so instructors can give feedback. Only the student, their instructors and site administrators can read them. Messages are sent to the AI service to generate replies; names and emails are not.</p>
     </div>
   );
 }

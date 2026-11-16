@@ -1,4 +1,4 @@
-// Teacher home, scenario list, results/analytics (SRS 3.5), and classes.
+// Instructor home, scenario list, results/analytics (SRS 3.5), and courses.
 import { useState } from "react";
 import { api, downloadFile, fmtDate, fmtDateTime, navigate, useApi, useAuth, useToast } from "../../lib.jsx";
 import { Breadcrumbs, Confirm, Empty, ErrorBanner, Field, Loading, Modal, PageHead, Status } from "../../ui.jsx";
@@ -22,7 +22,7 @@ export function TeacherHome() {
         </div>
         <div className="panel">
           <div className="panel-head"><h2>Recent activity</h2><a href="/scenarios">All scenarios</a></div>
-          {data.recent.length === 0 ? <Empty title="No activity yet">Assign a published scenario to a class and student activity will show up here.</Empty> : (
+          {data.recent.length === 0 ? <Empty title="No activity yet">Assign a published scenario to a course and student activity will show up here.</Empty> : (
             <div className="table-wrap" style={{ border: 0 }}>
               <table>
                 <thead><tr><th>Student</th><th>Scenario</th><th>Status</th><th>Outcome</th><th>Last activity</th><th><span className="sr-only">Open</span></th></tr></thead>
@@ -56,7 +56,7 @@ function NewScenarioButton({ primary }) {
         <ErrorBanner error={err} />
         <div className="stack">
           <button className="choice" onClick={() => create("blank")}><span>Start from scratch<br /><span className="small muted" style={{ fontWeight: 400 }}>An empty scenario with standard safety boundaries.</span></span></button>
-          <button className="choice" onClick={() => create("example")}><span>Start from an example<br /><span className="small muted" style={{ fontWeight: 400 }}>A finished conflict-resolution scenario you can edit to see how it fits together.</span></span></button>
+          <button className="choice" onClick={() => create("example")}><span>Start from an example<br /><span className="small muted" style={{ fontWeight: 400 }}>A finished money-and-banking scenario you can edit to see how paths and scenes fit together.</span></span></button>
         </div>
         <div className="modal-foot"><button className="btn quiet" onClick={() => setOpen(false)}>Cancel</button></div>
       </Modal>
@@ -71,7 +71,7 @@ export function ScenarioList() {
   const list = data?.filter((s) => (filter === "active" ? s.status !== "archived" : s.status === "archived"));
   return (
     <div className="page">
-      <PageHead title="Scenarios" sub={user.role === "admin" ? "Every scenario in the school." : "Scenarios you've created."}>
+      <PageHead title="Scenarios" sub={user.role === "admin" ? "Every scenario on the site." : "Scenarios you've created."}>
         <NewScenarioButton primary />
       </PageHead>
       <div className="tabs" role="tablist">
@@ -115,9 +115,9 @@ export function Results({ id }) {
         <button className="btn" onClick={() => downloadFile(`/api/scenarios/${id}/export.csv${qs ? "?" + qs : ""}`, "results.csv").catch(setExportErr)}>Export CSV</button>
       </PageHead>
       <div className="panel tight row" style={{ marginBottom: 20, alignItems: "flex-end" }}>
-        <Field label="Class">{(fid) => (
+        <Field label="Course">{(fid) => (
           <select id={fid} value={f.class_id} onChange={(e) => setF({ ...f, class_id: e.target.value })}>
-            <option value="">All my classes</option>{classes?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value="">All my courses</option>{classes?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>)}</Field>
         <Field label="Started from">{(fid) => <input id={fid} type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />}</Field>
         <Field label="to">{(fid) => <input id={fid} type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />}</Field>
@@ -133,7 +133,7 @@ export function Results({ id }) {
 function ResultsBody({ data }) {
   const s = data.summary;
   const pct = (n) => (s.completed ? (n / s.completed) * 100 : 0);
-  if (s.assigned === 0) return <Empty title="No students to report on">Assign this scenario to a class with students, or clear the filters.</Empty>;
+  if (s.assigned === 0) return <Empty title="No students to report on">Assign this scenario to a course with students, or clear the filters.</Empty>;
   return <>
     <div className="figures">
       <div className="figure"><b>{s.started} / {s.assigned}</b><span>students started</span></div>
@@ -154,14 +154,14 @@ function ResultsBody({ data }) {
         </>}
       </div>
       <div className="panel">
-        <h2>Decisions made</h2>
+        <h2>Paths taken</h2>
         <p className="small muted" style={{ margin: "4px 0 12px" }}>Across all attempts.</p>
         {data.decisions.map((dn) => {
           const total = dn.choices.reduce((a, c) => a + c.count, 0);
           return (
             <div key={dn.node} style={{ marginBottom: 14 }}>
               <h3 style={{ fontSize: "0.95rem" }}>{dn.node_title}</h3>
-              {total === 0 ? <p className="small muted">No one reached this decision.</p> : dn.choices.map((c) => (
+              {total === 0 ? <p className="small muted">No one reached this scene.</p> : dn.choices.map((c) => (
                 <div className="hbar" key={c.label}>
                   <span className="small">{c.label}</span>
                   <span className="track" aria-hidden="true"><span style={{ width: `${(c.count / total) * 100}%` }} /></span>
@@ -204,12 +204,12 @@ export function Classes() {
 
   return (
     <div className="page">
-      <PageHead title="Classes" sub={user.role === "admin" ? "Every class in the school and its teacher." : "Your classes and the students in them."}>
+      <PageHead title="Courses" sub={user.role === "admin" ? "Every course on the site and its instructor." : "Your courses and the students in them."}>
         <button className="btn primary" onClick={() => setCreating(true)}>Create class</button>
       </PageHead>
       <ErrorBanner error={error || err} onRetry={error ? reload : null} />
       {loading && <Loading />}
-      {data?.length === 0 && <Empty title="No classes yet">Create a class, then add students to it so you can assign scenarios.</Empty>}
+      {data?.length === 0 && <Empty title="No courses yet">Create a course, then add students to it so you can assign scenarios.</Empty>}
       <div className="stack">
         {data?.map((c) => (
           <section className="panel" key={c.id}>
@@ -232,17 +232,17 @@ export function Classes() {
           </section>
         ))}
       </div>
-      {creating && <CreateClass teachers={teachers} isAdmin={user.role === "admin"} onClose={() => setCreating(false)} onDone={() => { reload(); toast("Class created."); }} />}
+      {creating && <CreateClass teachers={teachers} isAdmin={user.role === "admin"} onClose={() => setCreating(false)} onDone={() => { reload(); toast("Course created."); }} />}
       {adding && <AddStudents cls={adding} onClose={() => setAdding(null)} onDone={reload} />}
       {removing?.kind === "student" && (
-        <Confirm title={`Remove ${removing.s.name}?`} confirmLabel="Remove from class" onClose={() => setRemoving(null)} onConfirm={async () => {
+        <Confirm title={`Remove ${removing.s.name}?`} confirmLabel="Remove from course" onClose={() => setRemoving(null)} onConfirm={async () => {
           try { await api(`/api/classes/${removing.c.id}/students/${removing.s.id}`, { method: "DELETE" }); toast("Student removed."); reload(); } catch (e) { setErr(e); }
         }}><p>They'll stop seeing scenarios assigned to {removing.c.name}. Their past results are kept.</p></Confirm>
       )}
       {removing?.kind === "class" && (
-        <Confirm title={`Delete ${removing.c.name}?`} danger confirmLabel="Delete class" onClose={() => setRemoving(null)} onConfirm={async () => {
-          try { await api(`/api/classes/${removing.c.id}`, { method: "DELETE" }); toast("Class deleted."); reload(); } catch (e) { setErr(e); }
-        }}><p>Students stay in the system and keep their results, but lose access to scenarios assigned through this class.</p></Confirm>
+        <Confirm title={`Delete ${removing.c.name}?`} danger confirmLabel="Delete course" onClose={() => setRemoving(null)} onConfirm={async () => {
+          try { await api(`/api/classes/${removing.c.id}`, { method: "DELETE" }); toast("Course deleted."); reload(); } catch (e) { setErr(e); }
+        }}><p>Students stay in the system and keep their results, but lose access to scenarios assigned through this course.</p></Confirm>
       )}
     </div>
   );
@@ -257,13 +257,13 @@ function CreateClass({ teachers, isAdmin, onClose, onDone }) {
     catch (e) { setErr(e); }
   };
   return (
-    <Modal title="Create class" onClose={onClose}>
+    <Modal title="Create course" onClose={onClose}>
       <ErrorBanner error={err} />
       <div className="stack">
-        <Field label="Class name">{(fid) => <input id={fid} type="text" value={name} placeholder="Period 3 – English 10" onChange={(e) => setName(e.target.value)} />}</Field>
-        {isAdmin && <Field label="Teacher">{(fid) => (
+        <Field label="Course name">{(fid) => <input id={fid} type="text" value={name} placeholder="PSYC 310 – Research Methods (Fall)" onChange={(e) => setName(e.target.value)} />}</Field>
+        {isAdmin && <Field label="Instructor">{(fid) => (
           <select id={fid} value={teacher} onChange={(e) => setTeacher(e.target.value)}>
-            <option value="">Choose a teacher…</option>{teachers?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            <option value="">Choose an instructor…</option>{teachers?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>)}</Field>}
       </div>
       <div className="modal-foot"><button className="btn quiet" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!name.trim()} onClick={submit}>Create class</button></div>
@@ -291,7 +291,7 @@ function AddStudents({ cls, onClose, onDone }) {
           <ul>{result.not_found.map((e) => <li key={e}>{e}</li>)}</ul></div>
       )}
       <Field label="Student emails" hint="Paste one or more, separated by commas, spaces or new lines.">
-        {(fid) => <textarea id={fid} rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="maya@school.edu, leo@school.edu" />}
+        {(fid) => <textarea id={fid} rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="maya@university.edu, leo@university.edu" />}
       </Field>
       <div className="modal-foot"><button className="btn quiet" onClick={onClose}>Close</button><button className="btn primary" disabled={!text.trim()} onClick={submit}>Add students</button></div>
     </Modal>

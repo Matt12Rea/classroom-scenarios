@@ -3,30 +3,40 @@
 Shape produced by the teacher's scenario builder:
 
 {
-  "setting": "A high-school hallway between classes.",
-  "objectives": ["Practice active listening", "De-escalate conflict"],
-  "characters": [{"id": "jordan", "name": "Jordan", "role": "frustrated student",
-                  "traits": "defensive but willing to talk if treated respectfully"}],
-  "boundaries": ["No profanity"],
-  "feedback_guidance": "Comment on whether the student listened before responding.",
-  "start": "hallway",
+  "setting": "A community bank weighing 30-year fixed-rate mortgages.",
+  "objectives": ["Explain interest-rate risk", "Recommend a way to manage it"],
+  "characters": [{"id": "carol", "name": "Carol", "role": "the bank's president",
+                  "traits": "practical, not an economist"}],
+  "boundaries": ["No personal investment advice"],
+  "feedback_guidance": "Did the student identify the maturity mismatch?",
+  "start": "briefing",
   "nodes": {
-    "hallway": {"title": "The confrontation", "prompt": "Jordan confronts you about a grade.",
-                "character": "jordan", "min_turns": 2,
-                "choices": [{"label": "Listen calmly", "next": "calm", "feedback": ""}],
-                "ending": null},
-    "calm": {"title": "Jordan relaxes", "prompt": "...", "character": "jordan", "choices": [],
-             "ending": {"label": "Resolved", "type": "success", "feedback": "You listened first."}}
+    "briefing": {"title": "The question", "prompt": "Carol asks whether to write more fixed-rate loans.",
+                 "character": "carol", "min_turns": 2, "wrap_after": 8,
+                 "choices": [{"label": "Explained the interest-rate risk",
+                              "signal": "The student explains that rising deposit costs squeeze fixed loan income.",
+                              "next": "sound", "feedback": ""}],
+                 "ending": null},
+    "sound": {"title": "Sound advice", "prompt": "...", "character": "carol", "choices": [],
+              "ending": {"label": "Sound recommendation", "type": "success", "feedback": "You found the risk."}}
   }
 }
 
+Students never see the choices. They are "paths": after each message the
+application asks a judge model whether the student's own words show they have
+taken one of them ("signal" describes what that looks like). "min_turns" is the
+fewest messages before a scene can move on; "wrap_after" is the most, after
+which the closest path is taken (0 = no per-scene limit).
+
 The original engine's format (single "character", choices as a dict, ending as a
-string) is still accepted and converted by normalize().
+string) is still accepted and converted by normalize(). Choices without a
+"signal" are matched on their label alone.
 """
 import re
 from collections import deque
 
 ENDING_TYPES = ("success", "partial", "fail")
+DEFAULT_WRAP_AFTER = 8
 DEFAULT_BOUNDARIES = [
     "Stay in character and on the topic of the scenario",
     "No profanity, sexual content, or graphic violence",
@@ -88,14 +98,19 @@ def normalize(d: dict) -> dict:
             min_turns = max(0, min(20, int(n.get("min_turns") or 0)))
         except (TypeError, ValueError):
             min_turns = 0
+        try:
+            wrap_after = max(0, min(50, int(n.get("wrap_after", DEFAULT_WRAP_AFTER))))
+        except (TypeError, ValueError):
+            wrap_after = DEFAULT_WRAP_AFTER
         out["nodes"][str(nid)] = {
             "title": str(n.get("title") or nid),
             "prompt": str(n.get("prompt") or ""),
             "character": str(n.get("character") or default_char),
             "min_turns": min_turns,
+            "wrap_after": wrap_after,
             "choices": [] if ending else [
-                {"label": str(c.get("label") or ""), "next": str(c.get("next") or ""),
-                 "feedback": str(c.get("feedback") or "")}
+                {"label": str(c.get("label") or ""), "signal": str(c.get("signal") or ""),
+                 "next": str(c.get("next") or ""), "feedback": str(c.get("feedback") or "")}
                 for c in choices if isinstance(c, dict)],
             "ending": ending,
         }
@@ -150,16 +165,22 @@ def validate(title: str, d: dict) -> dict:
                 err(f"{f}.ending.label", f"{name} is an ending. Name the outcome (e.g. “Resolved”).")
             continue
         if not n["choices"]:
-            err(f"{f}.choices", f"{name} is a dead end. Add a decision or mark it as an ending.")
+            err(f"{f}.choices", f"{name} is a dead end. Add a path or mark it as an ending.")
         labels = set()
         for j, c in enumerate(n["choices"]):
             if not c["label"].strip():
-                err(f"{f}.choices.{j}.label", f"{name}, decision {j + 1} needs text.")
+                err(f"{f}.choices.{j}.label", f"{name}, path {j + 1} needs a name.")
             if c["label"] in labels:
-                err(f"{f}.choices.{j}.label", f"{name} has two decisions with the same text.")
+                err(f"{f}.choices.{j}.label", f"{name} has two paths with the same name.")
             labels.add(c["label"])
             if c["next"] not in nodes:
-                err(f"{f}.choices.{j}.next", f"{name}, decision “{c['label'] or j + 1}” doesn't lead anywhere. Pick the next scene.")
+                err(f"{f}.choices.{j}.next", f"{name}, path “{c['label'] or j + 1}” doesn't lead anywhere. Pick the next scene.")
+            if c["label"].strip() and not c["signal"].strip():
+                warn(f"{f}.choices.{j}.signal", f"{name}, path “{c['label']}”: describe what the student says or "
+                                                "does to take it. Without that, it's matched on its name alone.")
+        if n["wrap_after"] and n["wrap_after"] < max(1, n["min_turns"]):
+            err(f"{f}.wrap_after", f"{name} wraps up before students reach the minimum number of messages. "
+                                   "Raise the wrap-up limit or lower the minimum.")
 
     # Reachability: every scene should be reachable, and an ending reachable from start.
     if d["start"] in nodes:
@@ -191,36 +212,97 @@ def validate(title: str, d: dict) -> dict:
     return {"errors": errors, "warnings": warnings}
 
 
+# Money and Banking: explain interest-rate risk to a community bank's president.
 EXAMPLE = normalize({
-    "setting": "A high-school hallway just after the bell. You are a peer mentor.",
-    "objectives": ["Practice active listening", "De-escalate a conflict"],
-    "characters": [{"id": "jordan", "name": "Jordan", "role": "a frustrated classmate",
-                    "traits": "Defensive and quick to interrupt, but opens up if treated with respect. "
-                              "Thinks the history teacher graded their essay unfairly."}],
-    "boundaries": ["Keep the conflict verbal; no threats", "Don't name real teachers or students"],
-    "feedback_guidance": "Did the student listen and acknowledge Jordan's feelings before offering solutions?",
-    "start": "hallway",
+    "setting": "Prairie State Community Bank, a small bank in central Iowa, in March. You are a junior analyst "
+               "who took Money and Banking last year. The bank funds itself mostly with savings deposits and "
+               "1-year CDs. Inflation has run near 4.5% for six months and the Federal Reserve has signalled more "
+               "rate increases. A local home builder wants the bank to offer its buyers 30-year fixed-rate "
+               "mortgages at 6%.",
+    "objectives": ["Explain the interest-rate risk of funding long-term fixed-rate loans with short-term deposits",
+                   "Connect expected Federal Reserve policy to a bank's net interest margin",
+                   "Make an economic recommendation a non-economist can act on"],
+    "characters": [
+        {"id": "carol", "name": "Carol Brennan", "role": "the bank's president",
+         "traits": "Practical, thirty years in community banking, not an economist. Wants plain English and a "
+                   "recommendation she can take to the loan committee. Glazes over at jargon; is persuaded by a "
+                   "concrete numerical example. Worried about losing the builder's business to the credit union."}],
+    "boundaries": ["Stay within the banking scenario; no personal investment advice",
+                   "Use fictional institutions and people"],
+    "feedback_guidance": "Did the student identify the maturity mismatch (short-term deposits funding 30-year fixed "
+                         "loans), show with numbers how rising rates squeeze the net interest margin, and propose a "
+                         "realistic way to manage the risk rather than refusing to lend?",
+    "start": "briefing",
     "nodes": {
-        "hallway": {"title": "The confrontation", "character": "jordan", "min_turns": 2,
-                    "prompt": "Jordan storms up to you waving a graded essay with a D on it, saying it's unfair "
-                              "and they're done with this class.",
-                    "choices": [{"label": "Ask Jordan to walk you through what happened", "next": "listen",
-                                 "feedback": "Inviting them to explain gives Jordan a sense of control."},
-                                {"label": "Tell Jordan to calm down", "next": "escalate",
-                                 "feedback": "Telling someone to calm down often makes them feel dismissed."}]},
-        "listen": {"title": "Jordan explains", "character": "jordan", "min_turns": 2,
-                   "prompt": "Jordan explains they worked hard and didn't understand the rubric.",
-                   "choices": [{"label": "Suggest asking the teacher for a meeting together", "next": "resolved"},
-                               {"label": "Say the teacher is probably right", "next": "escalate"}]},
-        "escalate": {"title": "Things heat up", "character": "jordan", "min_turns": 1,
-                     "prompt": "Jordan gets louder and other students start to stare.",
-                     "choices": [{"label": "Apologise and ask what would help", "next": "listen"},
-                                 {"label": "Walk away", "next": "walked"}]},
-        "resolved": {"title": "A plan", "character": "jordan", "prompt": "Jordan agrees to go to office hours with you.",
-                     "ending": {"label": "Conflict resolved", "type": "success",
-                                "feedback": "You listened first and helped Jordan find a next step."}},
-        "walked": {"title": "Walked away", "character": "jordan", "prompt": "Jordan is left upset in the hallway.",
-                   "ending": {"label": "Unresolved", "type": "fail",
-                              "feedback": "Walking away ended the conflict for you but not for Jordan."}},
+        "briefing": {"title": "The president's question", "character": "carol", "min_turns": 2, "wrap_after": 8,
+                     "prompt": "Carol waves you into her office. \"Rates are going up, so a 6% fixed mortgage sounds "
+                               "like a great deal for us. Should we write as many of these as we can?\"",
+                     "choices": [
+                         {"label": "Explained the bank's interest-rate risk",
+                          "signal": "The student explains that the bank pays short-term rates on deposits and CDs "
+                                    "that will rise if the Fed raises rates, while the mortgage keeps earning a "
+                                    "fixed 6% for 30 years, so the spread (net interest margin) shrinks or turns "
+                                    "negative. Naming the maturity or duration mismatch, or giving a numeric "
+                                    "example, counts.",
+                          "next": "options",
+                          "feedback": "Rising rates hurt a lender that borrows short and lends long. Spotting that "
+                                      "is the core of bank interest-rate risk."},
+                         {"label": "Endorsed writing more fixed-rate loans",
+                          "signal": "The student agrees the bank should write many 30-year fixed loans at 6%, or "
+                                    "argues that rising rates make fixed-rate loans better for the bank, without "
+                                    "raising the cost of the bank's own funding.",
+                          "next": "squeeze"}]},
+        "options": {"title": "So what do we do?", "character": "carol", "min_turns": 2, "wrap_after": 8,
+                    "prompt": "Carol leans back. \"All right, I follow. But if we don't offer something, the builder "
+                              "takes his buyers to the credit union. What do you recommend?\"",
+                    "choices": [
+                        {"label": "Recommended a way to manage the risk",
+                         "signal": "The student recommends a concrete way to keep lending while managing the risk, "
+                                   "such as adjustable-rate mortgages, pricing the fixed rate higher to reflect "
+                                   "expected rate rises, selling the fixed-rate loans on the secondary market, or "
+                                   "funding them with longer-term liabilities, and explains why it helps.",
+                         "next": "sound"},
+                        {"label": "Recommended stopping mortgage lending",
+                         "signal": "The student says the bank should stop offering mortgages, with no alternative "
+                                   "that keeps the business.",
+                         "next": "refused"}]},
+        "squeeze": {"title": "Eighteen months later", "character": "carol", "min_turns": 2, "wrap_after": 6,
+                    "prompt": "Eighteen months on, the bank is paying 7% on new CDs while the mortgage book still "
+                              "earns 6%. Carol drops a report on your desk. \"We're losing money on these loans. "
+                              "What happened?\"",
+                    "choices": [
+                        {"label": "Diagnosed the maturity mismatch",
+                         "signal": "The student explains that deposit and CD costs rose with market rates while the "
+                                   "fixed mortgage income did not, producing a negative spread, and suggests how "
+                                   "to price or structure future loans differently.",
+                         "next": "lesson"},
+                        {"label": "Blamed the wrong cause",
+                         "signal": "The student attributes the losses to something else, such as borrower defaults, "
+                                   "the builder, or bad luck, or can't explain them.",
+                         "next": "losses"}]},
+        "sound": {"title": "To the loan committee", "character": "carol",
+                  "prompt": "Carol takes your recommendation to the loan committee, which approves it with your "
+                            "numbers attached.",
+                  "ending": {"label": "Sound recommendation", "type": "success",
+                             "feedback": "You found the risk, explained it in terms Carol could use, and kept the "
+                                         "bank lending. That's applied monetary economics."}},
+        "refused": {"title": "Playing it too safe", "character": "carol",
+                    "prompt": "The bank stops offering mortgages. The builder moves his buyers to the credit union.",
+                    "ending": {"label": "Safe but costly", "type": "partial",
+                               "feedback": "You avoided the interest-rate risk, but gave up the interest income "
+                                           "and the customer relationship. Every option has an opportunity cost; "
+                                           "the better answer manages the risk instead of avoiding the business."}},
+        "lesson": {"title": "Learning the hard way", "character": "carol",
+                   "prompt": "Carol shifts new lending to adjustable rates. The old loans keep losing money until "
+                             "they're paid off.",
+                   "ending": {"label": "Diagnosed, too late", "type": "partial",
+                              "feedback": "Your diagnosis was right, but the risk was predictable from the Fed's "
+                                          "signals at the time the loans were made."}},
+        "losses": {"title": "Unexplained losses", "character": "carol",
+                   "prompt": "The examiners arrive before anyone at the bank can explain the losses.",
+                   "ending": {"label": "Risk not understood", "type": "fail",
+                              "feedback": "The losses came from rising funding costs against fixed income, not "
+                                          "defaults. Review how a bank's net interest margin responds to rate "
+                                          "changes."}},
     },
 })

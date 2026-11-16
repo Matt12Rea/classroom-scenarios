@@ -1,10 +1,13 @@
 // Administrator screens: overview, users & roles, safety review, interactions,
-// audit log. Also the shared conversation view used by teachers.
+// audit log. Also the shared conversation view used by instructors.
 import { useEffect, useState } from "react";
 import Script from "../../components/Script.jsx";
 import { api, CATEGORY_LABEL, fmtDateTime, OUTCOME_LABEL, ROLE_LABEL, useApi, useAuth, useToast } from "../../lib.jsx";
 import { ReportDialog } from "../Play.jsx";
 import { Breadcrumbs, Confirm, Empty, ErrorBanner, Field, Loading, Modal, PageHead, Status } from "../../ui.jsx";
+
+// Words people use for the instructor role when importing a list.
+const ROLE_ALIAS = { instructor: "teacher", professor: "teacher", faculty: "teacher", ta: "teacher", it: "it_support", administrator: "admin" };
 
 const SOURCE_LABEL = { auto_input: "Automatic check", auto_output: "Blocked AI reply", ai_review: "AI safety review", report: "User report" };
 
@@ -14,7 +17,7 @@ export function AdminHome() {
   const { data: flags } = useApi("/api/admin/flags?status=open");
   return (
     <div className="page">
-      <PageHead title="School overview" sub="Accounts, live activity and anything that needs a person to look at it." />
+      <PageHead title="Site overview" sub="Accounts, live activity and anything that needs a person to look at it." />
       <ErrorBanner error={error} onRetry={reload} />
       {!s && !error && <Loading />}
       {s && <>
@@ -167,7 +170,7 @@ function ImportUsers({ onClose, onDone }) {
     try {
       const r = await api("/api/admin/users/import", { method: "POST", body: {
         class_id: cls ? Number(cls) : null,
-        users: rows.map(([name, email, role]) => ({ name, email: email || "", role: (role || "student").toLowerCase().replace(" ", "_") })) } });
+        users: rows.map(([name, email, role]) => ({ name, email: email || "", role: ROLE_ALIAS[(role || "student").toLowerCase().replace(" ", "_")] || (role || "student").toLowerCase().replace(" ", "_") })) } });
       setRes(r); onDone();
     } catch (e) { setErr(e); }
   };
@@ -187,12 +190,12 @@ function ImportUsers({ onClose, onDone }) {
     <Modal title="Import users" onClose={onClose} wide>
       <ErrorBanner error={err} />
       <div className="stack">
-        <Field label="One person per line: name, email, role" hint="Role is optional and defaults to student. You can paste straight from a spreadsheet.">
-          {(id) => <textarea id={id} rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Maya Chen, maya@school.edu\nDana Rivera, dana@school.edu, teacher"} />}
+        <Field label="One person per line: name, email, role" hint="Role is optional and defaults to student (student, instructor, admin or IT support). You can paste straight from a spreadsheet.">
+          {(id) => <textarea id={id} rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Maya Chen, maya@university.edu\nDana Rivera, dana@university.edu, instructor"} />}
         </Field>
-        <Field label="Also add new students to a class (optional)">{(id) => (
+        <Field label="Also add new students to a course (optional)">{(id) => (
           <select id={id} value={cls} onChange={(e) => setCls(e.target.value)}>
-            <option value="">No class</option>{classes?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value="">No course</option>{classes?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>)}</Field>
       </div>
       <div className="modal-foot"><button className="btn quiet" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!rows.length} onClick={submit}>Import {rows.length || ""} {rows.length === 1 ? "person" : "people"}</button></div>
@@ -233,7 +236,7 @@ function ManageUser({ u, isSelf, onClose, onDone }) {
       {confirm === "data" && (
         <Confirm title={`Delete all of ${u.name}'s conversations?`} danger confirmLabel="Delete permanently" onClose={() => setConfirm(null)} onConfirm={async () => {
           try { const r = await api(`/api/admin/users/${u.id}/data`, { method: "DELETE" }); toast(`Deleted ${r.deleted_sessions} conversation${r.deleted_sessions === 1 ? "" : "s"}.`); onDone(); } catch (e) { setErr(e); }
-        }}><p>Use this for data-deletion requests. Their transcripts, decisions and results are removed permanently. The account stays.</p></Confirm>
+        }}><p>Use this for data-deletion requests. Their transcripts, scene history and results are removed permanently. The account stays.</p></Confirm>
       )}
     </Modal>
   );
@@ -384,7 +387,7 @@ export function Interactions() {
   );
 }
 
-// Teacher + admin view of one conversation.
+// Instructor + admin view of one conversation.
 export function SessionView({ id }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -418,7 +421,7 @@ export function SessionView({ id }) {
           : m.role === "assistant" && <button className="btn quiet small" onClick={() => setReporting(m)}>Report</button>)} />
         <aside className="stack">
           <div className="panel tight">
-            <span className="label">Decisions</span>
+            <span className="label">Scene changes</span>
             {s.path.length === 0 ? <p className="small muted" style={{ margin: 0 }}>None yet.</p> :
               <ol className="small" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{s.path.map((p, i) => <li key={i}><span className="muted">{p.node_title}:</span> {p.choice}</li>)}</ol>}
           </div>

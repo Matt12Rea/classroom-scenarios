@@ -50,7 +50,7 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 # ADMIN_PASSWORD on every start. Turn it on, restart, sign in, then turn it off.
 ADMIN_RESET_PASSWORD = _bool("ADMIN_RESET_PASSWORD", False)
 
-# ---- demo school ------------------------------------------------------------
+# ---- demo data --------------------------------------------------------------
 # LOAD_DEMO_DATA=true adds sample accounts for every role, classes, scenarios and
 # activity on start-up (once). For showing the site to people, not for real use.
 LOAD_DEMO_DATA = _bool("LOAD_DEMO_DATA", False)
@@ -77,6 +77,10 @@ SLOW_AI_SECONDS = float(os.getenv("SLOW_AI_SECONDS", "2"))            # NFR-5.1.
 HISTORY_TURNS = int(os.getenv("HISTORY_TURNS", "10"))
 MAX_INPUT_CHARS = int(os.getenv("MAX_INPUT_CHARS", "1500"))
 TURN_RATE_LIMIT = (10, 60)           # 10 AI turns per minute per user
+# How sure the scene judge must be (0-1) before a scene moves on from what the
+# student said. Higher keeps students in a scene longer; scenes still wrap up at
+# their message limit.
+JUDGE_CONFIDENCE = float(os.getenv("JUDGE_CONFIDENCE", "0.6"))
 
 # Second-opinion safety review of each exchange by Claude, run in the background
 # after the reply is sent, so it adds no latency for the student.
@@ -85,7 +89,7 @@ MODERATION_AI_REVIEW = _bool("MODERATION_AI_REVIEW", True)
 ESCALATE_AFTER_FLAGS = int(os.getenv("ESCALATE_AFTER_FLAGS", "3"))
 
 # ---- web ------------------------------------------------------------------
-# The public address of the site, e.g. https://scenarios.yourschool.edu
+# The public address of the site, e.g. https://scenarios.youruniversity.edu
 PUBLIC_URL = os.getenv("PUBLIC_URL", "").rstrip("/")
 # The site and its API are served from the same address, so cross-origin access
 # is only needed for the Vite dev server.

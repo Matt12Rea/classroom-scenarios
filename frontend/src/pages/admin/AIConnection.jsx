@@ -167,7 +167,7 @@ function ModelSection({ data, canEdit, onChange }) {
             onChange={() => setF({ ...f, mode: "mock", ai_review: false })} />
             <span><b>Demo</b><br /><span className="muted small">Canned replies, for training or trying the site without cost.</span></span></label>
         </fieldset>
-        <Field label="Model" hint="Haiku is fastest and cheapest and suits most classroom scenarios. Sonnet and Opus give richer replies but answer more slowly and cost more.">
+        <Field label="Model" hint="Haiku is fastest and cheapest and suits most course scenarios. Sonnet and Opus give richer replies but answer more slowly and cost more.">
           {(id) => (
             <select id={id} value={f.model} disabled={!canEdit} onChange={(e) => setF({ ...f, model: e.target.value })}>
               {options.map((m) => <option key={m} value={m}>{m}</option>)}

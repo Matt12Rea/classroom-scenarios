@@ -15,15 +15,15 @@ interface, AI connection management).
 | HTTPS for all communications | Met (New in 1.0) | Caddy or Render terminate TLS; `FORCE_HTTPS` redirects HTTP and sends HSTS (`main.py`) |
 | AI responses within 2 seconds | Partial | Haiku model by default, history capped at 10 exchanges, slow replies flagged to the student (NFR-5.1.6). Depends on the external service. |
 | Claude AI as the primary engine, via a secure API interface | Met | `ai.py` is the only module that calls Claude; key server-side only (see 3.2) |
-| Application controls scenario progression, not the AI | Met | Decisions and endings are application logic (`play.py: student_decision`) |
+| Application controls scenario progression, not the AI | Met | A judge call classifies the student's messages against the instructor's paths; the application validates the pick, applies limits and moves the scene (`play.py: student_turn`, `_advance`, `_wrap_up`) |
 
 ## 3.1 Scenario authoring and management
 
 | ID | Status | Where |
 |---|---|---|
 | REQ-3.1.1 Only authorized teachers create scenarios | Met | `require("teacher","admin")` on scenario routes |
-| REQ-3.1.2 Multiple decision points | Met | Scenes with decisions, Editor → Scenes |
-| REQ-3.1.3 Multiple outcomes per decision point | Met | Each decision leads to any scene or ending |
+| REQ-3.1.2 Multiple decision points | Met | Scenes with paths, Editor → Scenes |
+| REQ-3.1.3 Multiple outcomes per decision point | Met | Each path leads to any scene or ending |
 | REQ-3.1.4 Edit/delete own scenarios | Met | Ownership checks in `access.py` |
 | REQ-3.1.5 Save as draft | Met | Status `draft` until published |
 | REQ-3.1.6 Validate before publishing | Met | `scenario_schema.validate`; publish blocked with errors |
@@ -39,7 +39,7 @@ interface, AI connection management).
 | REQ-3.2.3.3 Character role and traits | Met | Scene speaker's name, role, personality |
 | REQ-3.2.3.4 Conversation history | Met | Last `HISTORY_TURNS` exchanges |
 | REQ-3.2.3.5 Student's current input | Met | |
-| REQ-3.2.3.6 Scenario instructions and boundaries | Met | Teacher boundaries + fixed school-safety rules |
+| REQ-3.2.3.6 Scenario instructions and boundaries | Met | Instructor boundaries + fixed safety rules |
 | REQ-3.2.3.7 Validate response before display | Met | `moderation.screen_output`; blocked replies replaced and queued for review |
 | REQ-3.2.3.8 Record interactions | Met | `messages` table with tokens and latency |
 | REQ-3.2.3.9 Notify and recover when Claude is unavailable | Met (improved in 1.0) | Automatic retries with backoff; student keeps progress and can resend; admins see the cause on Overview and **AI connection** |
@@ -52,7 +52,7 @@ interface, AI connection management).
 | REQ-3.3.1 Multiple decision points | Met | |
 | REQ-3.3.2 Multiple paths per decision point | Met | |
 | REQ-3.3.3 Each decision tied to a branch/outcome | Met | `choices[].next` |
-| REQ-3.3.4 Show next step after decision | Met | |
+| REQ-3.3.4 Show next step after decision | Met | Scene change line and toast in the player |
 | REQ-3.3.5 Record each decision | Met | `decisions` table |
 | REQ-3.3.6 Multiple completion outcomes | Met | Endings typed success / partial / didn't succeed |
 | REQ-3.3.7 Feedback on incomplete/invalid paths | Met | Dead ends, unreachable scenes and broken links flagged in the editor and on the map |
@@ -169,7 +169,7 @@ interface, AI connection management).
 | UC-01 Create scenario | Met |
 | UC-02 Participate in scenario | Met |
 | UC-03 Interact with AI character (incl. retry when Claude is unavailable) | Met |
-| UC-04 Make scenario decision | Met |
+| UC-04 Make scenario decision | Met (decisions are inferred from the conversation, not clicked) |
 | UC-05 View analytics | Met |
 | UC-06 Manage users | Met |
 | UC-07 Exchange data with LMS | Not started |

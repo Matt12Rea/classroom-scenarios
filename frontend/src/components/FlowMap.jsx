@@ -1,4 +1,4 @@
-// Visual map of a scenario's scenes and decisions, laid out left to right by
+// Visual map of a scenario's scenes and paths, laid out left to right by
 // distance from the starting scene. Click a scene to edit it.
 const W = 180, H = 58, GX = 70, GY = 22, PAD = 20;
 
@@ -67,7 +67,7 @@ export default function FlowMap({ def, onSelect }) {
           const p = pos[id];
           const cls = ["node", id === def.start && "start", n.ending?.type, depth[id] === undefined && "unreachable"].filter(Boolean).join(" ");
           const title = n.title.length > 22 ? n.title.slice(0, 21) + "…" : n.title;
-          const sub = n.ending ? `Ending: ${n.ending.label || "unnamed"}` : `${(n.choices || []).length} decision${(n.choices || []).length === 1 ? "" : "s"}`;
+          const sub = n.ending ? `Ending: ${n.ending.label || "unnamed"}` : `${(n.choices || []).length} path${(n.choices || []).length === 1 ? "" : "s"}`;
           return (
             <g key={id} className={cls} transform={`translate(${p.x},${p.y})`} tabIndex={0} role="button"
               aria-label={`Edit scene ${n.title}`} onClick={() => onSelect?.(id)}

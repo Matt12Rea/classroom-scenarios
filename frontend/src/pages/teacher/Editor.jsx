@@ -89,7 +89,7 @@ export default function Editor({ id }) {
         navigate(`/preview/${st.id}`); return;
       }
       await api(`/api/scenarios/${id}/${kind}`, { method: "POST" });
-      toast({ publish: "Published. Students in assigned classes can now see it.", unpublish: "Unpublished. It's a draft again.", archive: "Archived." }[kind]);
+      toast({ publish: "Published. Students in assigned courses can now see it.", unpublish: "Unpublished. It's a draft again.", archive: "Archived." }[kind]);
       reload();
     } catch (e) {
       setActionErr(e);
@@ -145,7 +145,7 @@ export default function Editor({ id }) {
           <Field label="Title" error={errFor("title")}>{(fid) => <input id={fid} type="text" value={sc.title} onChange={(e) => set({ title: e.target.value })} />}</Field>
           <Field label="Short description" hint="Shown to students on their scenario list.">{(fid) => <textarea id={fid} rows={2} value={sc.description} onChange={(e) => set({ description: e.target.value })} />}</Field>
           <Field label="Setting" hint="Where and when this happens, and who the student is in the story." error={errFor("setting")}>
-            {(fid) => <textarea id={fid} rows={3} value={d.setting} placeholder="A high-school hallway just after the bell. You are a peer mentor." onChange={(e) => setDef({ setting: e.target.value })} />}
+            {(fid) => <textarea id={fid} rows={3} value={d.setting} placeholder="A community bank in Iowa as the Fed raises rates. You are a junior analyst advising the bank's president." onChange={(e) => setDef({ setting: e.target.value })} />}
           </Field>
           <div className={`field ${errFor("objectives") ? "invalid" : ""}`}>
             <span className="label">Learning objectives</span>
@@ -155,13 +155,13 @@ export default function Editor({ id }) {
           </div>
           <div className="field">
             <span className="label">Boundaries for the AI</span>
-            <span className="hint">Rules every character follows. Standard school-safety rules always apply on top of these.</span>
+            <span className="hint">Rules every character follows. Standard safety rules always apply on top of these.</span>
             <ListEditor items={d.boundaries} onChange={(boundaries) => setDef({ boundaries })} placeholder="Boundary" addLabel="Add boundary" />
           </div>
           <Field label="What should the end-of-scenario feedback focus on?" hint="The AI uses this to write each student a short personalised debrief.">
-            {(fid) => <textarea id={fid} rows={2} value={d.feedback_guidance} placeholder="Did the student listen before offering solutions?" onChange={(e) => setDef({ feedback_guidance: e.target.value })} />}
+            {(fid) => <textarea id={fid} rows={2} value={d.feedback_guidance} placeholder="Did the student identify the bank's interest-rate risk and propose a realistic way to manage it?" onChange={(e) => setDef({ feedback_guidance: e.target.value })} />}
           </Field>
-          <Field label="Message limit" hint="The most messages a student can send in one attempt. Keeps conversations focused.">
+          <Field label="Message limit" hint="The most messages a student can send in one attempt. When it's reached, the scenario wraps up based on what the student said.">
             {(fid) => <input id={fid} type="number" min={1} max={200} value={sc.max_turns} style={{ maxWidth: 140 }} onChange={(e) => set({ max_turns: Number(e.target.value) || 1 })} />}
           </Field>
         </div>
@@ -176,11 +176,11 @@ export default function Editor({ id }) {
             return (
               <div className="char-card stack" key={c.id}>
                 <div className="grid-2">
-                  <Field label="Name" error={errFor(`characters.${i}.name`)}>{(fid) => <input id={fid} type="text" value={c.name} placeholder="Jordan" onChange={(e) => upd({ name: e.target.value })} />}</Field>
-                  <Field label="Who they are" error={errFor(`characters.${i}.role`)}>{(fid) => <input id={fid} type="text" value={c.role} placeholder="a frustrated classmate" onChange={(e) => upd({ role: e.target.value })} />}</Field>
+                  <Field label="Name" error={errFor(`characters.${i}.name`)}>{(fid) => <input id={fid} type="text" value={c.name} placeholder="Carol Brennan" onChange={(e) => upd({ name: e.target.value })} />}</Field>
+                  <Field label="Who they are" error={errFor(`characters.${i}.role`)}>{(fid) => <input id={fid} type="text" value={c.role} placeholder="the bank's president" onChange={(e) => upd({ role: e.target.value })} />}</Field>
                 </div>
                 <Field label="Personality and background" hint="How they talk and react. What would make them open up or shut down?">
-                  {(fid) => <textarea id={fid} rows={3} value={c.traits} placeholder="Defensive at first, but opens up if treated with respect." onChange={(e) => upd({ traits: e.target.value })} />}
+                  {(fid) => <textarea id={fid} rows={3} value={c.traits} placeholder="Practical, not an economist. Wants plain English and a concrete numerical example." onChange={(e) => upd({ traits: e.target.value })} />}
                 </Field>
                 <div className="row end">
                   <button className="btn danger small" disabled={used} title={used ? "Used in a scene. Change those scenes first." : ""}
@@ -262,7 +262,7 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
 
   const addScene = (from) => {
     const id = newId("scene", ids);
-    const nodes = { ...d.nodes, [id]: { title: `Scene ${ids.length + 1}`, prompt: "", character: d.characters[0]?.id || "", min_turns: 1, choices: [], ending: null } };
+    const nodes = { ...d.nodes, [id]: { title: `Scene ${ids.length + 1}`, prompt: "", character: d.characters[0]?.id || "", min_turns: 1, wrap_after: 8, choices: [], ending: null } };
     setDef({ nodes, start: d.start || id });
     setScene(id);
     return { id, nodes, from };
@@ -286,7 +286,7 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
           return (
             <button key={id} aria-current={id === nid} onClick={() => setScene(id)}>
               <span><b>{x.title || id}</b> {sceneHasErr(id) && <span className="err-dot" aria-label="has problems">●</span>}</span>
-              <span className="kind">{id === d.start ? "Starting scene. " : ""}{x.ending ? `Ending (${x.ending.type})` : `${x.choices.length} decision${x.choices.length === 1 ? "" : "s"}`}</span>
+              <span className="kind">{id === d.start ? "Starting scene. " : ""}{x.ending ? `Ending (${x.ending.type})` : `${x.choices.length} path${x.choices.length === 1 ? "" : "s"}`}</span>
             </button>
           );
         })}
@@ -312,22 +312,28 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
         <div className="field">
           <span className="label">This scene…</span>
           <div className="seg" role="radiogroup" aria-label="Scene type">
-            <label><input type="radio" name="kind" checked={!n.ending} onChange={() => setNode(nid, { ending: null })} />asks the student to decide</label>
+            <label><input type="radio" name="kind" checked={!n.ending} onChange={() => setNode(nid, { ending: null })} />branches on what the student does</label>
             <label><input type="radio" name="kind" checked={!!n.ending} onChange={() => setNode(nid, { ending: { label: "", type: "success", feedback: "" }, choices: [] })} />is an ending</label>
           </div>
         </div>
 
         {!n.ending && <>
-          <Field label="Messages before decisions unlock" hint="0 lets students decide straight away. 1–3 makes them talk with the character first.">
-            {(fid) => <input id={fid} type="number" min={0} max={20} value={n.min_turns} style={{ maxWidth: 120 }} onChange={(e) => setNode(nid, { min_turns: Math.max(0, Number(e.target.value) || 0) })} />}
-          </Field>
+          <div className="grid-2">
+            <Field label="Minimum messages in this scene" hint="The scene can't move on before this. 1–3 makes students engage before the AI judges their approach." error={errFor(`nodes.${nid}.min_turns`)}>
+              {(fid) => <input id={fid} type="number" min={0} max={20} value={n.min_turns} style={{ maxWidth: 120 }} onChange={(e) => setNode(nid, { min_turns: Math.max(0, Number(e.target.value) || 0) })} />}
+            </Field>
+            <Field label="Wrap up after" hint="If no path is clear by this many messages, the closest one is taken. 0 means no limit for this scene." error={errFor(`nodes.${nid}.wrap_after`)}>
+              {(fid) => <input id={fid} type="number" min={0} max={50} value={n.wrap_after ?? 8} style={{ maxWidth: 120 }} onChange={(e) => setNode(nid, { wrap_after: Math.max(0, Number(e.target.value) || 0) })} />}
+            </Field>
+          </div>
           <div className="stack" style={{ marginTop: 8 }}>
-            <span className="label">Decisions</span>
+            <span className="label">Paths out of this scene</span>
+            <p className="hint small muted" style={{ margin: 0 }}>Students never see these as buttons. After each message, the AI reads the conversation and checks whether the student's own words show they've taken one of these paths. Name each path as what the student did (for example, “Explained the bank's interest-rate risk”); students see that name when the scene moves on.</p>
             {errFor(`nodes.${nid}.choices`) && <div className="banner error">{errFor(`nodes.${nid}.choices`)}</div>}
             {n.choices.map((c, j) => (
               <div className="decision-row" key={j}>
-                <Field label={`Decision ${j + 1}`} error={errFor(`nodes.${nid}.choices.${j}.label`)}>
-                  {(fid) => <input id={fid} type="text" value={c.label} placeholder="What the student can choose to do" onChange={(e) => setChoice(j, { label: e.target.value })} />}
+                <Field label={`Path ${j + 1}`} error={errFor(`nodes.${nid}.choices.${j}.label`)}>
+                  {(fid) => <input id={fid} type="text" value={c.label} placeholder="Explained the bank's interest-rate risk" onChange={(e) => setChoice(j, { label: e.target.value })} />}
                 </Field>
                 <Field label="Leads to" error={errFor(`nodes.${nid}.choices.${j}.next`) ? "Pick a scene" : null}>
                   {(fid) => (
@@ -336,7 +342,7 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
                         const id = newId("scene", ids);
                         const nodes = { ...d.nodes,
                           [nid]: { ...n, choices: n.choices.map((x, k) => (k === j ? { ...x, next: id } : x)) },
-                          [id]: { title: c.label ? `After “${c.label.slice(0, 30)}”` : `Scene ${ids.length + 1}`, prompt: "", character: n.character, min_turns: 1, choices: [], ending: null } };
+                          [id]: { title: c.label ? `After “${c.label.slice(0, 30)}”` : `Scene ${ids.length + 1}`, prompt: "", character: n.character, min_turns: 1, wrap_after: 8, choices: [], ending: null } };
                         setDef({ nodes });
                       } else setChoice(j, { next: e.target.value });
                     }}>
@@ -347,19 +353,24 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
                     </select>
                   )}
                 </Field>
-                <button className="btn quiet small" aria-label={`Remove decision ${j + 1}`} onClick={() => setNode(nid, { choices: n.choices.filter((_, k) => k !== j) })}>Remove</button>
+                <button className="btn quiet small" aria-label={`Remove path ${j + 1}`} onClick={() => setNode(nid, { choices: n.choices.filter((_, k) => k !== j) })}>Remove</button>
+                <div className="sig">
+                  <Field label="What the student says or does to take this path" hint="Be specific. The AI only moves on when the student has actually done this, not just mentioned it." error={errFor(`nodes.${nid}.choices.${j}.signal`)}>
+                    {(fid) => <textarea id={fid} rows={2} value={c.signal || ""} placeholder="The student explains that deposit costs rise with Fed rate increases while the fixed mortgage income doesn't, squeezing the bank's margin." onChange={(e) => setChoice(j, { signal: e.target.value })} />}
+                  </Field>
+                </div>
                 <div className="fb">
-                  <Field label="Feedback when chosen (optional)">{(fid) => <input id={fid} type="text" value={c.feedback} placeholder="Shown right after the student picks this" onChange={(e) => setChoice(j, { feedback: e.target.value })} />}</Field>
+                  <Field label="Feedback when this path is taken (optional)">{(fid) => <input id={fid} type="text" value={c.feedback} placeholder="Shown to the student as the scene moves on" onChange={(e) => setChoice(j, { feedback: e.target.value })} />}</Field>
                 </div>
               </div>
             ))}
-            <div><button className="btn small" onClick={() => setNode(nid, { choices: [...n.choices, { label: "", next: "", feedback: "" }] })}>Add decision</button></div>
+            <div><button className="btn small" onClick={() => setNode(nid, { choices: [...n.choices, { label: "", signal: "", next: "", feedback: "" }] })}>Add path</button></div>
           </div>
         </>}
 
         {n.ending && <>
           <div className="grid-2">
-            <Field label="Outcome name" error={errFor(`nodes.${nid}.ending.label`)}>{(fid) => <input id={fid} type="text" value={n.ending.label} placeholder="Conflict resolved" onChange={(e) => setNode(nid, { ending: { ...n.ending, label: e.target.value } })} />}</Field>
+            <Field label="Outcome name" error={errFor(`nodes.${nid}.ending.label`)}>{(fid) => <input id={fid} type="text" value={n.ending.label} placeholder="Sound recommendation" onChange={(e) => setNode(nid, { ending: { ...n.ending, label: e.target.value } })} />}</Field>
             <div className="field">
               <span className="label">How did it go?</span>
               <div className="seg" role="radiogroup" aria-label="Outcome type">
@@ -404,7 +415,7 @@ function AssignPanel({ scenario, onChange }) {
   };
   return (
     <div className="panel">
-      <h2 style={{ marginBottom: 12 }}>Assign to classes</h2>
+      <h2 style={{ marginBottom: 12 }}>Assign to courses</h2>
       <ErrorBanner error={err} />
       {scenario.status !== "published" && <p className="muted">Publish the scenario to assign it.</p>}
       {scenario.assignments.length > 0 && (
@@ -420,9 +431,9 @@ function AssignPanel({ scenario, onChange }) {
       {scenario.status === "published" && (
         <div className="row" style={{ alignItems: "flex-end", marginTop: 12 }}>
           <div className="field grow" style={{ minWidth: 200 }}>
-            <label htmlFor="assign-class">Class</label>
+            <label htmlFor="assign-class">Course</label>
             <select id="assign-class" value={cls} onChange={(e) => setCls(e.target.value)}>
-              <option value="">Choose a class…</option>
+              <option value="">Choose a course…</option>
               {classes?.filter((c) => !assigned.has(c.id)).map((c) => <option key={c.id} value={c.id}>{c.name} ({c.students.length} students)</option>)}
             </select>
           </div>
@@ -433,7 +444,7 @@ function AssignPanel({ scenario, onChange }) {
           <button className="btn primary" disabled={!cls} onClick={assign}>Assign</button>
         </div>
       )}
-      {classes?.length === 0 && <p className="small muted">You don't have any classes yet. <a href="/classes">Create one</a>.</p>}
+      {classes?.length === 0 && <p className="small muted">You don't have any courses yet. <a href="/classes">Create one</a>.</p>}
     </div>
   );
 }

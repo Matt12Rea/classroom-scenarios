@@ -1,6 +1,7 @@
 // Renders a session as a transcript: scene headings and narration (set like a
 // case file), then each spoken line with the speaker in a left-hand column.
-// Used by the student player and by the teacher/admin conversation views.
+// When a scene moves on, a line shows the approach the student's words were
+// matched to. Used by the student player and the instructor/admin views.
 import { Fragment } from "react";
 
 export default function Script({ state, youLabel = "You", highlightId, tools, children }) {
@@ -25,20 +26,23 @@ export default function Script({ state, youLabel = "You", highlightId, tools, ch
   };
 
   state.messages.forEach((m, i) => {
-    if (pending && !(m.role === "system" && m.speaker === "Feedback")) sceneHead(`scene-${i}`);
+    if (pending && !(m.role === "system" && (m.speaker === "Feedback" || m.speaker === "Inference"))) sceneHead(`scene-${i}`);
     const flagged = m.id === highlightId;
     const tool = tools?.(m);
     if (m.role === "system" && m.speaker === "Decision") {
       out.push(
         <div key={m.id} className="decision-line" id={`m${m.id}`}>
-          <span className="decision-who">{youLabel === "You" ? "You chose" : `${youLabel} chose`}</span>
+          <span className="decision-who">{youLabel === "You" ? "Your approach" : `${youLabel}'s approach`}</span>
           <span className="decision-what">{m.content}</span>
         </div>,
       );
       sceneIdx += 1;
       pending = true;
+    } else if (m.role === "system" && m.speaker === "Inference") {
+      // Only sent to instructors and admins: why the scene moved on.
+      out.push(<p key={m.id} className="insight-line"><b>Why the scene moved on:</b> {m.content}</p>);
     } else if (m.role === "system" && m.speaker === "Feedback") {
-      out.push(<p key={m.id} className="note-line"><span className="sr-only">Teacher's note: </span>{m.content}</p>);
+      out.push(<p key={m.id} className="note-line"><span className="sr-only">Instructor's note: </span>{m.content}</p>);
     } else if (m.role === "system") {
       out.push(<div key={m.id} className="support-line" role="note">{m.content}</div>);
     } else {

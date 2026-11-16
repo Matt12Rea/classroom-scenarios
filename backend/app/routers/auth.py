@@ -34,7 +34,7 @@ def login(req: LoginReq, request: Request, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(401, "That email and password don't match. Check both and try again.")
     if not user.active:
-        raise HTTPException(403, "This account is disabled. Contact your school administrator.")
+        raise HTTPException(403, "This account is disabled. Contact your site administrator.")
     user.last_login = datetime.now(timezone.utc)
     db.commit()
     token, exp = create_token(user)

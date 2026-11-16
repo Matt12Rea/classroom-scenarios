@@ -1,7 +1,7 @@
 # Putting Classroom Scenarios on the web
 
 This guide takes the app from `localhost` to a real website with its own address
-and HTTPS, for example `https://scenarios.yourschool.edu`.
+and HTTPS, for example `https://scenarios.youruniversity.edu`.
 
 The whole site (pages and API) runs as **one container**. It needs a PostgreSQL
 database and something in front of it that handles HTTPS. Pick one of the two
@@ -10,7 +10,7 @@ routes below.
 | | Route A: Render (managed) | Route B: your own Ubuntu server |
 |---|---|---|
 | Good for | Getting live quickly and free, no server to look after | Matches the SRS's Ubuntu server environment; full control |
-| You need | GitHub, Render and Neon accounts (all free, no technical setup) | A Linux server (school server, DigitalOcean, AWS Lightsail…) and a domain name |
+| You need | GitHub, Render and Neon accounts (all free, no technical setup) | A Linux server (campus server, DigitalOcean, AWS Lightsail…) and a domain name |
 | HTTPS | Automatic | Automatic (Caddy + Let's Encrypt) |
 | Backups | Neon keeps a short history you can restore from | Nightly `pg_dump` to `./backups` (included) |
 | Time | About 30 minutes, mostly waiting | About 30 minutes, needs command-line comfort |
@@ -85,7 +85,7 @@ Render's free database, isn't deleted after 30 days.
    database password, so don't share it or put it in GitHub.
 
 The free database pauses itself after a few minutes without use and wakes up in under a
-second when the site needs it. It holds 1 GB, which is plenty for a school's scenarios
+second when the site needs it. It holds 1 GB, which is plenty for a department's scenarios
 and conversations.
 
 ### Part 2: Create the site on Render
@@ -141,20 +141,20 @@ and conversations.
 
 ### Adding demo accounts (optional)
 
-To show the site to people, you can load a ready-made demo school: an account for every
+To show the site to people, you can load a ready-made demo university: an account for every
 role, three classes, two scenarios and some sample student activity (including a couple
 of safety flags to review).
 
 1. In **classroomscenarios → Environment**, add `LOAD_DEMO_DATA` with the value `true`.
 2. Optionally add `DEMO_PASSWORD` with a password of your choice for all the demo
    accounts. If you don't, they use `demo-pass-1`.
-3. Save. Render restarts the site and adds the demo school once. Leaving the setting on
+3. Save. Render restarts the site and adds the demo university once. Leaving the setting on
    doesn't add it again.
 
 | Role | Email |
 |---|---|
 | Administrator | `admin@demo.school` |
-| Teacher | `teacher@demo.school` (and `teacher2@demo.school`) |
+| Instructor | `teacher@demo.school` (and `teacher2@demo.school`) |
 | Student | `student@demo.school` (and seven more, such as `leo@demo.school`) |
 | IT support | `it@demo.school` |
 
@@ -163,12 +163,12 @@ demo password can sign in, including as the demo administrator. Before real stud
 the site, disable the demo accounts in **Users and roles** (select them, then **Disable**),
 or keep demos on a separate Render site.
 
-### Using your school's own web address (optional)
+### Using your university's own web address (optional)
 
-To use an address like `scenarios.yourschool.edu` instead of `onrender.com`:
+To use an address like `scenarios.youruniversity.edu` instead of `onrender.com`:
 
 1. In Render, open **classroomscenarios → Settings → Custom Domains** and add the address.
-2. Render shows a DNS record to create. Send it to whoever manages your school's
+2. Render shows a DNS record to create. Send it to whoever manages your university's
    domain (usually IT), and ask them to add it.
 3. Once the record is in place, Render issues the HTTPS certificate automatically.
    The `onrender.com` address keeps working too.
@@ -204,7 +204,7 @@ scenarios and conversations are in the database, so they're kept across updates.
 | Website on Render (free plan) | Free. Sleeps after 15 minutes idle; 750 free hours a month, which covers one site running all month. |
 | Database on Neon (free plan) | Free. 1 GB of storage; doesn't expire. |
 | `onrender.com` address and HTTPS | Free |
-| Your own domain (optional) | Whatever your domain registrar charges; often the school already has one |
+| Your own domain (optional) | Whatever your domain registrar charges; often the university already has one |
 | Claude API | Pay per use, billed by Anthropic. Demo mode (no key) costs nothing. |
 
 The only part that can't be free is Claude itself: each character reply is a small
@@ -223,7 +223,7 @@ day), change `plan: free` to `plan: 0.5c-512mb` in `render.yaml`.
 You need a server with a public IP address and a domain name you control.
 
 1. **Point the domain at the server.** In your DNS settings, create an `A` record
-   for `scenarios.yourschool.edu` with the server's IP address.
+   for `scenarios.youruniversity.edu` with the server's IP address.
 2. **Install Docker** on the server:
    ```bash
    curl -fsSL https://get.docker.com | sh
@@ -245,7 +245,7 @@ You need a server with a public IP address and a domain name you control.
    ```
    This starts four containers: the app, PostgreSQL, a nightly backup job, and Caddy.
    Caddy gets the HTTPS certificate automatically (ports 80 and 443 must be open).
-6. Open `https://scenarios.yourschool.edu` and sign in with `ADMIN_EMAIL`.
+6. Open `https://scenarios.youruniversity.edu` and sign in with `ADMIN_EMAIL`.
 
 Useful commands:
 
@@ -318,8 +318,9 @@ Point an uptime monitor (UptimeRobot, Better Stack, etc.) at
 | `AI_MODE` | automatic | `mock` forces demo replies; blank uses Claude when a key exists |
 | `AI_MAX_RETRIES` | `2` | Automatic retries for temporary AI errors |
 | `AI_TIMEOUT_SECONDS` | `20` | Give up on a single AI request after this long |
+| `JUDGE_CONFIDENCE` | `0.6` | How sure the AI must be (0–1) that a student's messages match a path before the scene moves on |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | | Creates the first administrator if none exists (the password is temporary) |
-| `LOAD_DEMO_DATA` | off | `true` adds the demo school (accounts for every role plus sample data) once |
+| `LOAD_DEMO_DATA` | off | `true` adds the demo university (accounts for every role plus sample data) once |
 | `DEMO_PASSWORD` | `demo-pass-1` | Password for all demo accounts |
 | `ADMIN_RESET_PASSWORD` | off | `true` resets the `ADMIN_EMAIL` account's password to `ADMIN_PASSWORD` on start. Remove it after use. |
 | `SESSION_TIMEOUT_MINUTES` | `60` | Inactive users are signed out (NFR-5.3.5) |
@@ -336,4 +337,4 @@ Point an uptime monitor (UptimeRobot, Better Stack, etc.) at
 - [ ] First admin has changed the temporary password
 - [ ] Auto-reload and a spend limit are set in the Anthropic Console
 - [ ] Backups are running and you've tried restoring one
-- [ ] Your school's privacy lead has reviewed what is sent to the AI service (see the Help page and NFR-5.5.5)
+- [ ] Your institution's privacy lead has reviewed what is sent to the AI service (see the Help page and NFR-5.5.5)

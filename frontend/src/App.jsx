@@ -12,11 +12,11 @@ import AIConnection from "./pages/admin/AIConnection.jsx";
 // Navigation is grouped so the same items always appear in the same place (NFR-5.4.2).
 const NAV = {
   student: [[null, [["/", "My scenarios"]]]],
-  teacher: [[null, [["/", "Overview"], ["/scenarios", "Scenarios"], ["/classes", "Classes"]]]],
+  teacher: [[null, [["/", "Overview"], ["/scenarios", "Scenarios"], ["/classes", "Courses"]]]],
   admin: [
     [null, [["/", "Overview"]]],
     ["Oversight", [["/flags", "Safety review"], ["/interactions", "Conversations"]]],
-    ["Teaching", [["/scenarios", "Scenarios"], ["/classes", "Classes"]]],
+    ["Teaching", [["/scenarios", "Scenarios"], ["/classes", "Courses"]]],
     ["Administration", [["/users", "Users and roles"], ["/ai", "AI connection"], ["/audit", "Audit log"]]],
   ],
   it_support: [[null, [["/", "System status"], ["/ai", "AI connection"]]]],

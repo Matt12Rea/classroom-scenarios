@@ -1,6 +1,12 @@
-"""Student-facing engine: start/resume a scenario, talk to characters, make
-decisions, report content. (SRS 3.2, 3.3, 3.4; UC-02, UC-03, UC-04.)"""
+"""Student-facing engine: start/resume a scenario, talk to characters, report
+content. (SRS 3.2, 3.3, 3.4; UC-02, UC-03, UC-04.)
+
+There are no decision buttons. After each student message a judge model reads
+the scene's conversation and says whether the student has taken one of the
+scene's paths; the application checks that against the scenario and moves the
+student on. A scene that reaches its message limit takes the closest path."""
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -18,6 +24,7 @@ from ..security import current_user, require, turn_rate_limit
 
 log = logging.getLogger("aicss.play")
 router = APIRouter(prefix="/api", tags=["play"])
+_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="ai")   # reply and judge run side by side
 
 
 def utcnow():
@@ -30,7 +37,12 @@ def session_state(db: Session, s: PlaySession, viewer: User) -> dict:
     node = sc["nodes"][s.node]
     ch = ai.character_for(sc, s.node)
     privileged = viewer.role in ("teacher", "admin") and viewer.id != s.student_id
+    # Instructors (and instructors previewing their own scenario) also see each scene's
+    # paths and why the judge moved the scene on. Students never do.
+    insight = privileged or (s.is_preview and viewer.id == s.student_id)
     msgs = db.scalars(select(Message).where(Message.session_id == s.id).order_by(Message.id)).all()
+    if not insight:
+        msgs = [m for m in msgs if m.speaker != "Inference"]
     turns_here = sum(1 for m in msgs if m.role == "user" and m.node == s.node and m.in_context)
     decisions = db.scalars(select(Decision).where(Decision.session_id == s.id).order_by(Decision.id)).all()
     visited = {s.snapshot["start"], *(d.next_node for d in decisions)}
@@ -45,9 +57,11 @@ def session_state(db: Session, s: PlaySession, viewer: User) -> dict:
                      "characters": [{"id": c["id"], "name": c["name"], "role": c["role"]} for c in sc["characters"]]},
         "node": {"id": s.node, "title": node["title"], "prompt": node["prompt"],
                  "character": {"name": ch["name"], "role": ch["role"]},
-                 "choices": [{"label": c["label"]} for c in node["choices"]],
-                 "min_turns": node["min_turns"], "turns_here": turns_here,
-                 "choices_locked": turns_here < node["min_turns"], "is_ending": bool(ending)},
+                 "paths": ([{"label": c["label"], "signal": c.get("signal", "")} for c in node["choices"]]
+                           if insight else None),
+                 "min_turns": node["min_turns"], "wrap_after": node.get("wrap_after", 0),
+                 "turns_here": turns_here, "is_ending": bool(ending)},
+        "insight": insight,
         "messages": [{
             "id": m.id, "role": m.role, "speaker": m.speaker, "node": m.node,
             "content": m.content if (not m.hidden or privileged) else "[Removed by an administrator]",
@@ -110,6 +124,88 @@ def _background_review(session_id: int, user_msg_id: int, student_text: str, ai_
         db.close()
 
 
+def _judge(eng, sc: dict, node_id: str, transcript: list[dict], forced: bool) -> dict | None:
+    """Ask the judge which path (if any) the student has taken. None if the AI is unavailable."""
+    system, user_msg = ai.judge_request(sc, node_id, transcript, forced)
+    if not system:
+        return None
+    try:
+        text = eng.judge(system, user_msg)
+    except ai.AIUnavailable:
+        return None
+    return ai.parse_judgement(text, len(sc["nodes"][node_id]["choices"]), forced)
+
+
+def _path_so_far(db, s: PlaySession) -> list[str]:
+    sc = s.snapshot
+    out = []
+    for d in db.scalars(select(Decision).where(Decision.session_id == s.id).order_by(Decision.id)):
+        label = d.choice[:1].lower() + d.choice[1:]
+        out.append(f"in “{sc['nodes'].get(d.node, {}).get('title', d.node)}” the student {label}")
+    return out
+
+
+def _advance(db, s: PlaySession, choice: dict, reason: str, forced: bool) -> dict | None:
+    """Move to the scene a path leads to (UC-04). Pure application logic: only paths
+    the teacher wrote can be taken, and only to scenes that exist (REQ-3.3.8)."""
+    sc = s.snapshot
+    nxt = choice.get("next")
+    if nxt not in sc["nodes"]:
+        return None
+    target = sc["nodes"][nxt]
+    db.add(Decision(session_id=s.id, node=s.node, choice=choice["label"], next_node=nxt))
+    db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Decision",
+                   content=choice["label"]))
+    note = (reason or "").strip()
+    if forced:
+        note = f"Wrapped up at the message limit. {note}".strip()
+    if note:          # shown to instructors only (see session_state)
+        db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Inference",
+                       content=note[:1000]))
+    if choice.get("feedback"):
+        db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Feedback",
+                       content=choice["feedback"]))
+    s.node = nxt
+    s.updated_at = utcnow()
+    ending = target.get("ending")
+    if ending:
+        s.status, s.outcome, s.outcome_type = "completed", ending["label"], ending["type"]
+        s.completed_at = utcnow()
+        db.flush()
+        transcript = [{"role": m.role, "content": m.content, "speaker": m.speaker} for m in db.scalars(
+            select(Message).where(Message.session_id == s.id, Message.in_context.is_(True)).order_by(Message.id))]
+        path = [d.choice for d in db.scalars(select(Decision).where(Decision.session_id == s.id)
+                                             .order_by(Decision.id))]
+        try:
+            r = ai.engine().debrief(ai.debrief_prompt(sc, s.scenario.title, transcript, path, ending))
+            fb = r.text
+            if fb and moderation.screen_output(fb):
+                fb = ""
+            s.feedback = fb or None
+        except ai.AIUnavailable:
+            s.feedback = None          # teacher-written feedback is still shown
+    return {"label": choice["label"], "to": target["title"], "ending": bool(ending), "forced": forced}
+
+
+def _wrap_up(db, s: PlaySession) -> None:
+    """The student has used every message: take the closest path from each remaining
+    scene, judged on the whole conversation, until an ending is reached."""
+    sc = s.snapshot
+    transcript = [{"role": m.role, "content": m.content} for m in db.scalars(
+        select(Message).where(Message.session_id == s.id, Message.in_context.is_(True),
+                              Message.role.in_(("user", "assistant"))).order_by(Message.id))]
+    eng = ai.engine()
+    for _ in range(len(sc["nodes"]) + 1):           # a loop in the scenario can't spin forever
+        node = sc["nodes"][s.node]
+        if node.get("ending") or not node["choices"] or s.status == "completed":
+            return
+        verdict = _judge(eng, sc, s.node, transcript, forced=True) or \
+            {"index": 0, "reason": "The AI was unavailable, so the scene's first path was taken."}
+        if not _advance(db, s, node["choices"][verdict["index"]], verdict["reason"], forced=True):
+            return
+        db.flush()
+
+
 # ---------------------------------------------------------------- endpoints --
 @router.get("/student/assignments")
 def my_assignments(user: User = Depends(require("student")), db: Session = Depends(get_db)):
@@ -165,7 +261,7 @@ def start_session(req: StartReq, user: User = Depends(current_user), db: Session
             db.delete(old)
     else:
         if user.role != "student":
-            raise HTTPException(403, "Use Preview to try a scenario as a teacher.")
+            raise HTTPException(403, "Use Preview to try a scenario as an instructor.")
         if sc.status != "published" or not is_assigned_to(db, sc.id, user.id):
             raise HTTPException(404, "This scenario isn't assigned to you.")
         existing = db.scalars(select(PlaySession).where(
@@ -179,7 +275,7 @@ def start_session(req: StartReq, user: User = Depends(current_user), db: Session
 
     d = normalize(sc.definition)
     if d["start"] not in d["nodes"]:
-        raise HTTPException(409, "This scenario isn't finished yet. Ask your teacher to check it.")
+        raise HTTPException(409, "This scenario isn't finished yet. Ask your instructor to check it.")
     attempts = db.scalar(select(func.count(PlaySession.id)).where(
         PlaySession.scenario_id == sc.id, PlaySession.student_id == user.id,
         PlaySession.is_preview.is_(req.preview))) or 0
@@ -205,13 +301,11 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
     """Free-text dialogue with the AI character (UC-03)."""
     s = _own_active_session(db, user, session_id)
     if s.ai_paused:
-        raise HTTPException(423, "Conversation is paused for this scenario. You can still make decisions, "
-                                 "or ask your teacher for help.")
+        raise HTTPException(423, "The conversation is paused for this scenario. Ask your instructor for help.")
     if s.snapshot["nodes"][s.node].get("ending"):
         raise HTTPException(409, "This scenario is already complete.")
     if s.turns >= s.scenario.max_turns:
-        raise HTTPException(429, f"You've used all {s.scenario.max_turns} messages for this scenario. "
-                                 "Choose a decision to continue.")
+        raise HTTPException(429, f"You've used all {s.scenario.max_turns} messages for this scenario.")
     text = req.text.strip()
     if not text or len(text) > config.MAX_INPUT_CHARS:
         raise HTTPException(422, f"Messages must be between 1 and {config.MAX_INPUT_CHARS} characters.")
@@ -240,11 +334,25 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
         select(Message).where(Message.session_id == s.id, Message.in_context.is_(True),
                               Message.role.in_(("user", "assistant")))
         .order_by(Message.id.desc()).limit(config.HISTORY_TURNS * 2)).all())]
-    decisions = db.scalars(select(Decision).where(Decision.session_id == s.id).order_by(Decision.id)).all()
-    path = [f"the student chose “{d.choice}”" for d in decisions]
+    path = _path_so_far(db, s)
 
+    # Should this message be judged? Only once the scene's minimum is met; and the
+    # judgement is forced (closest path) when the scene or the scenario runs out of messages.
+    node = sc["nodes"][s.node]
+    scene_msgs = [{"role": m.role, "content": m.content} for m in db.scalars(
+        select(Message).where(Message.session_id == s.id, Message.node == s.node, Message.in_context.is_(True),
+                              Message.role.in_(("user", "assistant"))).order_by(Message.id))]
+    turns_here = sum(1 for m in scene_msgs if m["role"] == "user") + 1      # counting this message
+    at_limit = s.turns + 1 >= s.scenario.max_turns
+    judge_now = bool(node["choices"]) and turns_here >= max(1, node["min_turns"])
+    forced = judge_now and (at_limit or 0 < node.get("wrap_after", 0) <= turns_here)
+
+    eng = ai.engine()
+    reply_f = _pool.submit(eng.reply, ai.build_system_prompt(sc, s.node, path), history, text)
+    judge_f = (_pool.submit(_judge, eng, sc, s.node, scene_msgs + [{"role": "user", "content": text}], forced)
+               if judge_now else None)
     try:
-        result = ai.engine().reply(ai.build_system_prompt(sc, s.node, path), history, text)
+        result = reply_f.result()
     except ai.AIUnavailable:
         # REQ-3.2.3.9: nothing is saved, so the student can simply retry the same message.
         raise HTTPException(503, f"{ch['name']} can't respond right now because the AI service is unavailable. "
@@ -273,66 +381,37 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
     db.flush()
     if track and hits:
         _maybe_escalate(db, s)
+
+    # Move the scene on if the student's words show they've taken a path.
+    advanced = None
+    verdict = judge_f.result() if judge_f else None
+    if verdict and verdict["index"] is not None and (forced or verdict["confidence"] >= config.JUDGE_CONFIDENCE):
+        advanced = _advance(db, s, node["choices"][verdict["index"]], verdict["reason"], forced)
+        db.flush()
+    if at_limit and s.status != "completed":
+        _wrap_up(db, s)
+        advanced = advanced or {"forced": True, "ending": s.status == "completed"}
     db.commit()
     if track and settings_store.ai_settings().ai_review:
         bg.add_task(_background_review, s.id, um.id, text, reply)
     state = session_state(db, s, user)
     state["slow"] = result.latency_ms > config.SLOW_AI_SECONDS * 1000
+    state["advanced"] = advanced
     return state
 
 
-class DecisionReq(BaseModel):
-    choice: str
-
-
-@router.post("/sessions/{session_id}/decision")
-def student_decision(session_id: int, req: DecisionReq, user: User = Depends(current_user),
-                     db: Session = Depends(get_db)):
-    """Branching (UC-04). Pure application logic; the AI never decides progression."""
+@router.post("/sessions/{session_id}/finish")
+def finish_session(session_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """For a session that has used every message but hasn't reached an ending (for
+    example one started before scenes moved on automatically): wrap it up now."""
     s = _own_active_session(db, user, session_id)
-    sc = s.snapshot
-    node = sc["nodes"][s.node]
-    choice = next((c for c in node["choices"] if c["label"] == req.choice), None)
-    if not choice or choice["next"] not in sc["nodes"]:          # REQ-3.3.8
-        raise HTTPException(422, "That isn't one of the available decisions.")
-    turns_here = db.scalar(select(func.count(Message.id)).where(
-        Message.session_id == s.id, Message.node == s.node, Message.role == "user",
-        Message.in_context.is_(True))) or 0
-    if turns_here < node["min_turns"] and not s.ai_paused:
-        need = node["min_turns"] - turns_here
-        ch = ai.character_for(sc, s.node)
-        raise HTTPException(409, f"Talk with {ch['name']} a little more first "
-                                 f"({need} more message{'s' if need != 1 else ''}).")
-
-    nxt = choice["next"]
-    target = sc["nodes"][nxt]
-    db.add(Decision(session_id=s.id, node=s.node, choice=choice["label"], next_node=nxt))
-    db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Decision",
-                   content=choice["label"]))
-    if choice.get("feedback"):
-        db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Feedback",
-                       content=choice["feedback"]))
-    s.node = nxt
-    s.updated_at = utcnow()
-    ending = target.get("ending")
-    if ending:
-        s.status, s.outcome, s.outcome_type = "completed", ending["label"], ending["type"]
-        s.completed_at = utcnow()
-        db.flush()
-        transcript = [{"role": m.role, "content": m.content, "speaker": m.speaker} for m in db.scalars(
-            select(Message).where(Message.session_id == s.id, Message.in_context.is_(True)).order_by(Message.id))]
-        path = [d.choice for d in db.scalars(select(Decision).where(Decision.session_id == s.id)
-                                             .order_by(Decision.id))]
-        try:
-            r = ai.engine().debrief(ai.debrief_prompt(sc, s.scenario.title, transcript, path, ending))
-            fb = r.text
-            if fb and moderation.screen_output(fb):
-                fb = ""
-            s.feedback = fb or None
-        except ai.AIUnavailable:
-            s.feedback = None          # teacher-written feedback is still shown
+    if s.turns < s.scenario.max_turns:
+        raise HTTPException(409, "You still have messages left. Keep the conversation going.")
+    _wrap_up(db, s)
     db.commit()
-    return session_state(db, s, user)
+    state = session_state(db, s, user)
+    state["advanced"] = {"forced": True, "ending": s.status == "completed"}
+    return state
 
 
 class ReportReq(BaseModel):
