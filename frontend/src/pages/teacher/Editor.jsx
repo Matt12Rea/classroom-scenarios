@@ -362,13 +362,16 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
                     {(fid) => <textarea id={fid} rows={2} value={c.signal || ""} placeholder="The student explains that deposit costs rise with Fed rate increases while the fixed mortgage income doesn't, squeezing the bank's margin." onChange={(e) => setChoice(j, { signal: e.target.value })} />}
                   </Field>
                 </div>
-                <div className="fb">
-                  <Field label="Feedback (optional)">{(fid) => <input id={fid} type="text" value={c.feedback} placeholder="Shown as the scene moves on" onChange={(e) => setChoice(j, { feedback: e.target.value })} />}</Field>
-                </div>
+                <details className="fb more" open={!!c.feedback}>
+                  <summary>Feedback for this path</summary>
+                  <input type="text" value={c.feedback} aria-label={`Feedback for path ${j + 1}`} placeholder="Shown to the student as the scene moves on" onChange={(e) => setChoice(j, { feedback: e.target.value })} />
+                </details>
               </div>
             ))}
             <div><button className="btn small" onClick={() => setNode(nid, { choices: [...n.choices, { label: "", signal: "", next: "", feedback: "" }] })}>Add path</button></div>
             {n.choices.length > 0 && (
+              <details className="more" open={!!n.fallback || !!errFor(`nodes.${nid}.fallback`)}>
+              <summary>More options</summary>
               <Field label="If no path is clear at the maximum" hint="Covers one-word answers, refusing to engage, or going off-topic." error={errFor(`nodes.${nid}.fallback`)}>
                 {(fid) => (
                   <select id={fid} value={n.fallback || ""} onChange={(e) => setNode(nid, { fallback: e.target.value })}>
@@ -377,6 +380,7 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
                   </select>
                 )}
               </Field>
+              </details>
             )}
           </div>
         </>}

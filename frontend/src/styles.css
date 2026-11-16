@@ -532,3 +532,7 @@ a:hover { color: var(--brand-hover); text-decoration-color: currentColor; }
 /* editor + analytics accents */
 .scene-list button[aria-current="true"] { border-left-color: var(--brass); }
 .hbar .track span { background: var(--brand); }
+
+/* collapsed secondary settings */
+details.more > summary { cursor: pointer; color: var(--brand); font-weight: 600; font-size: 0.9375rem; width: fit-content; }
+details.more[open] > summary { margin-bottom: var(--s2); }

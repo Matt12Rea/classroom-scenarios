@@ -79,7 +79,9 @@ export default function Play({ sessionId }) {
     <div className="play">
       <aside className="brief" aria-label="Scenario briefing">
         <div>
-          <Breadcrumbs items={isPreview ? [["/scenarios", "Scenarios"], [backTo, "Editor"], [null, "Preview"]] : [["/", "My scenarios"], [null, state.scenario.title]]} />
+          {isPreview
+            ? <Breadcrumbs items={[["/scenarios", "Scenarios"], [backTo, "Editor"], [null, "Preview"]]} />
+            : <a className="small" href="/">My scenarios</a>}
           <h1>{state.scenario.title}</h1>
           {isPreview && <p className="badge info plain" style={{ marginTop: 8 }}>Preview. Not saved to results.</p>}
         </div>
@@ -98,10 +100,6 @@ export default function Play({ sessionId }) {
           </ul>
         </section>
         <section className="brief-sec">
-          <h2>How to play</h2>
-          <p className="small" style={{ margin: 0 }}>Reply in your own words, and describe actions when you need to. Scenes move on once your approach is clear.</p>
-        </section>
-        <section className="brief-sec">
           <h2>Progress</h2>
           <div className="progress-track" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
             aria-label="Scenes reached"><span style={{ width: `${pct}%` }} /></div>
@@ -109,7 +107,6 @@ export default function Play({ sessionId }) {
             {done ? "Finished. " : ""}{state.turns} of {state.max_turns} messages used.
           </p>
         </section>
-        <p className="small muted">Progress saves automatically. Your instructor and administrators can read this conversation.</p>
       </aside>
 
       <section aria-label="Scenario">
@@ -153,10 +150,10 @@ export default function Play({ sessionId }) {
                 <div className="grow">
                   <label htmlFor="say" className="sr-only">Your message to {ch.name}</label>
                   <textarea id="say" ref={inputRef} value={text} maxLength={MAX_CHARS} rows={2}
-                    placeholder={`Message ${ch.name}…`} disabled={sending}
+                    placeholder={`Reply to ${ch.name}, or describe what you do…`} disabled={sending}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) send(e); }} />
-                  <div className="count" aria-hidden="true">Enter to send, Shift+Enter for a new line{state.max_turns - state.turns <= 3 ? `. ${state.max_turns - state.turns} message${state.max_turns - state.turns === 1 ? "" : "s"} left` : ""}{text.length > MAX_CHARS - 200 ? `. ${MAX_CHARS - text.length} characters left` : ""}</div>
+                  <div className="count" aria-hidden="true">{[state.max_turns - state.turns <= 3 && `${state.max_turns - state.turns} message${state.max_turns - state.turns === 1 ? "" : "s"} left`, text.length > MAX_CHARS - 200 && `${MAX_CHARS - text.length} characters left`].filter(Boolean).join(". ")}</div>
                 </div>
                 <button className="btn primary" type="submit" disabled={sending || !text.trim()} style={{ marginBottom: 22 }}>
                   {sending ? "Sending…" : "Send"}

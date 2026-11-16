@@ -34,11 +34,6 @@ export function Login() {
             <Logo size={56} className="crest" />
             <h2>Practise the conversations your discipline depends on.</h2>
             <p>Role-plays written by your instructors, where you put course material to work: advise a bank on interest-rate risk, defend a study to an ethics board, explain a genetic test result.</p>
-            <dl>
-              <dt>Students</dt><dd>talk with AI characters. What they say decides where the scenario goes.</dd>
-              <dt>Instructors</dt><dd>write scenarios, assign them to courses, and review each conversation.</dd>
-              <dt>Administrators</dt><dd>manage accounts and review flagged messages.</dd>
-            </dl>
           </aside>
         </div>
       </main>
@@ -91,7 +86,7 @@ export function StudentHome() {
   const first = user.name.split(" ")[0];
   return (
     <div className="page">
-      <PageHead title="My scenarios" sub={`Welcome, ${first}. Read each brief, then handle the situation in your own words.`} />
+      <PageHead title="My scenarios" sub={`Welcome, ${first}.`} />
       <ErrorBanner error={error || err} onRetry={error ? reload : null} />
       {loading && <Loading />}
       {data && data.length === 0 && (
@@ -105,15 +100,10 @@ export function StudentHome() {
                 <h2>{a.title}</h2>
                 <p className="assignment-class">{a.class_name}{a.due_at && <> <span aria-hidden="true">/</span> Due {fmtDate(a.due_at)}</>}</p>
                 {a.description && <p className="assignment-desc">{a.description}</p>}
-                {a.objectives.length > 0 && <>
-                  <h3 className="sr-only">Goals</h3>
-                  <ul>{a.objectives.slice(0, 3).map((o) => <li key={o}>{o}</li>)}</ul>
-                </>}
               </div>
               <div className="assignment-side">
                 <div className="row end">
-                  <Status value={a.status} />
-                  {a.outcome_type && <span className={`badge ${a.outcome_type}`}>{OUTCOME_LABEL[a.outcome_type]}</span>}
+                  {a.outcome_type ? <span className={`badge ${a.outcome_type}`}>{OUTCOME_LABEL[a.outcome_type]}</span> : <Status value={a.status} />}
                 </div>
                 <div className="row end">
                   {a.status === "in_progress" && <button className="btn primary" onClick={() => open(a)}>Continue</button>}

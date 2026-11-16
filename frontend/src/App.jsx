@@ -117,8 +117,6 @@ function Shell() {
         </button>}
         <a className="wordmark" href="/"><Logo /><span>Classroom Scenarios</span></a>
         <div className="masthead-end">
-          {!hasSide && <a className="masthead-link" href="/" aria-current={path === "/" ? "page" : undefined}>My scenarios</a>}
-          <a className="masthead-link" href="/help">Help</a>
           <UserMenu user={user} logout={logout} />
         </div>
       </header>
@@ -136,10 +134,6 @@ function Shell() {
                 ))}
               </div>
             ))}
-            <div className="side-foot">
-              Signed in as {ROLE_LABEL[user.role].toLowerCase()}.
-              <br /><a href="/help">Privacy and help</a>
-            </div>
           </div>
         </nav>}
         <main className="main" id="main" tabIndex={-1}>{page}</main>
