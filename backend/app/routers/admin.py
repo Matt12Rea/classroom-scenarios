@@ -232,7 +232,9 @@ def flag_out(f: Flag, db: Session) -> dict:
 @router.get("/flags")
 def list_flags(status: str = "open", severity: str = "", category: str = "",
                user: User = Depends(admin), db: Session = Depends(get_db)):
-    q = select(Flag)
+    # Flags from instructors' previews stay out of the queue.
+    q = select(Flag).outerjoin(PlaySession, PlaySession.id == Flag.session_id).where(
+        or_(Flag.session_id.is_(None), PlaySession.is_preview.is_(False)))
     if status:
         q = q.where(Flag.status == status)
     if severity:
@@ -309,7 +311,7 @@ def pause_session(session_id: int, req: PauseReq, user: User = Depends(admin), d
         raise HTTPException(404, "Session not found.")
     if s.ai_paused and not req.paused and s.status == "in_progress":
         db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Resumed",
-                       content="An administrator reviewed this session and resumed it. You can continue."))
+                       content="An administrator resumed this session. You can continue."))
     s.ai_paused = req.paused
     audit(db, user, "session.pause" if req.paused else "session.resume", f"session:{s.id}")
     db.commit()
@@ -379,7 +381,10 @@ def stats(user: User = Depends(require("admin", "it_support")), db: Session = De
     msgs = db.execute(select(func.count(Message.id), func.avg(Message.latency_ms),
                              func.sum(Message.input_tokens), func.sum(Message.output_tokens))
                       .where(Message.role == "assistant", Message.created_at >= day)).one()
-    open_flags = dict(db.execute(select(Flag.severity, func.count(Flag.id)).where(Flag.status == "open")
+    open_flags = dict(db.execute(select(Flag.severity, func.count(Flag.id))
+                                 .outerjoin(PlaySession, PlaySession.id == Flag.session_id)
+                                 .where(Flag.status == "open",
+                                        or_(Flag.session_id.is_(None), PlaySession.is_preview.is_(False)))
                                  .group_by(Flag.severity)).all())
     ai_cfg, ai_st = settings_store.ai_settings(), settings_store.ai_status()
     return {

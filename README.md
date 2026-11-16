@@ -113,8 +113,10 @@ taken: the one the instructor picked, or by default the path that can lead to th
 (`scenario_schema.fallback_choice`). One-word answers, refusing to engage and baiting therefore never earn a good
 ending, and the student is told the scene moved on without them.
 
-**Repeated baiting.** When `AUTO_PAUSE_AFTER_FLAGS` (default 3) of a student's messages in one session have been
-flagged, the session pauses: no AI reply, no restart, and a high-priority "Repeated misuse" flag for administrators,
+**Repeated baiting.** Every message is screened twice before the reply is shown: by keyword patterns
+(`moderation.py`) and by the judge call, which also says whether the latest message is baiting (trying to break the
+character, get it to say something inappropriate, or derail the scenario). When `AUTO_PAUSE_AFTER_FLAGS` (default 3)
+of a student's messages in one session have been flagged, the session pauses: no AI reply, no restart, and a high-priority "Repeated misuse" flag for administrators,
 who can resume it from the conversation view.
 
 Students never see the paths or the judge's reasoning. Instructors see both: in Preview (an "Instructor view" panel under the

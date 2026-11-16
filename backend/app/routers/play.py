@@ -156,10 +156,10 @@ def _decide(sc: dict, node_id: str, verdict: dict | None, forced: bool) -> tuple
 
 # Flags that count towards an automatic pause: the student's own flagged messages.
 # Self-harm is excluded: it gets support, not a penalty.
-PAUSE_SOURCES = ("auto_input", "ai_review")
+PAUSE_SOURCES = ("auto_input", "ai_review", "ai_judge")
 PAUSE_EXCLUDED = ("self_harm", "repeated")
-PAUSE_MESSAGE = ("This session has been paused because several messages were flagged by the safety checks. "
-                 "An administrator will review it. Your progress is saved, and you can continue if they resume it.")
+PAUSE_MESSAGE = ("Paused for review: several of your messages were flagged. You can continue once an "
+                 "administrator resumes the session.")
 
 
 def _flagged_messages(db, s: PlaySession) -> int:
@@ -171,7 +171,7 @@ def _flagged_messages(db, s: PlaySession) -> int:
 def _maybe_autopause(db, s: PlaySession) -> bool:
     """Pause the session for administrator review once enough of the student's messages
     have been flagged (AUTO_PAUSE_AFTER_FLAGS). Returns True if it paused now."""
-    if s.is_preview or s.ai_paused or s.status == "completed" or config.AUTO_PAUSE_AFTER_FLAGS <= 0:
+    if s.ai_paused or s.status == "completed" or config.AUTO_PAUSE_AFTER_FLAGS <= 0:
         return False
     n = _flagged_messages(db, s)
     if n < config.AUTO_PAUSE_AFTER_FLAGS:
@@ -185,6 +185,24 @@ def _maybe_autopause(db, s: PlaySession) -> bool:
                 reason=f"Session paused automatically after {n} flagged messages. Resume it from the "
                        "conversation view once reviewed."))
     return True
+
+
+def _reaches_pause(db, s: PlaySession) -> bool:
+    """Would one more flagged message reach the automatic-pause limit?"""
+    return config.AUTO_PAUSE_AFTER_FLAGS > 0 and _flagged_messages(db, s) + 1 >= config.AUTO_PAUSE_AFTER_FLAGS
+
+
+def _pause_now(db, s: PlaySession, viewer: User, text: str, hits: list) -> dict:
+    """Record the flagged message (kept out of the AI's context), flag it, and pause."""
+    um = Message(session_id=s.id, role="user", content=text, node=s.node, in_context=False)
+    db.add(um)
+    db.flush()
+    for h, source in hits:
+        _flag(db, s, h, source, text, um.id)
+    db.flush()
+    _maybe_autopause(db, s)
+    db.commit()
+    return session_state(db, s, viewer)
 
 
 def _path_so_far(db, s: PlaySession) -> list[str]:
@@ -215,8 +233,7 @@ def _advance(db, s: PlaySession, choice: dict, reason: str, forced: bool) -> dic
                        content=note[:1000]))
     if reason == FALLBACK_REASON:
         db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Feedback",
-                       content="You didn't clearly take an approach in this scene, so it ended and the "
-                               "situation moved on without you."))
+                       content="No clear approach in this scene, so the situation moved on without you."))
     elif choice.get("feedback"):
         db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Feedback",
                        content=choice["feedback"]))
@@ -370,7 +387,10 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
     ch = ai.character_for(sc, s.node)
     hits = moderation.screen_input(text)
     flag_src = "auto_input"
-    track = not s.is_preview            # teacher test runs don't fill the admin queue
+    # Instructor previews are flagged and paused like real sessions so the safety rules can be
+    # tested, but their flags are kept out of the admin queue (see admin.list_flags), and
+    # they get no background AI review.
+    track = not s.is_preview
 
     # Self-harm language: pause the role-play and show support info instead of calling the AI.
     if any(h.block_ai for h in hits):
@@ -389,17 +409,8 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
     # Repeated baiting: if this flagged message reaches the limit, record it and pause
     # the session for an administrator instead of letting the conversation go on.
     counted = [h for h in hits if h.category not in PAUSE_EXCLUDED]
-    if track and counted and config.AUTO_PAUSE_AFTER_FLAGS > 0 and \
-            _flagged_messages(db, s) + 1 >= config.AUTO_PAUSE_AFTER_FLAGS:
-        um = Message(session_id=s.id, role="user", content=text, node=s.node, in_context=False)
-        db.add(um)
-        db.flush()
-        for h in hits:
-            _flag(db, s, h, flag_src, text, um.id)
-        db.flush()
-        _maybe_autopause(db, s)
-        db.commit()
-        return session_state(db, s, user)
+    if counted and _reaches_pause(db, s):
+        return _pause_now(db, s, user, text, [(h, flag_src) for h in hits])
 
     history = [{"role": m.role, "content": m.content} for m in reversed(db.scalars(
         select(Message).where(Message.session_id == s.id, Message.in_context.is_(True),
@@ -416,18 +427,29 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
     turns_here = sum(1 for m in scene_msgs if m["role"] == "user") + 1      # counting this message
     at_limit = s.turns + 1 >= s.scenario.max_turns
     judge_now = bool(node["choices"]) and turns_here >= max(1, node["min_turns"])
+    # The judge runs on every message: it also screens the message for baiting. Its path
+    # answer is used only once the scene's minimum is met.
     forced = judge_now and (at_limit or 0 < node.get("wrap_after", 0) <= turns_here)
 
     eng = ai.engine()
     reply_f = _pool.submit(eng.reply, ai.build_system_prompt(sc, s.node, path), history, text)
     judge_f = (_pool.submit(_judge, eng, sc, s.node, scene_msgs + [{"role": "user", "content": text}], forced)
-               if judge_now else None)
+               if node["choices"] else None)
     try:
         result = reply_f.result()
     except ai.AIUnavailable:
         # REQ-3.2.3.9: nothing is saved, so the student can simply retry the same message.
         raise HTTPException(503, f"{ch['name']} can't respond right now because the AI service is unavailable. "
                                  "Your progress is saved. Try sending your message again in a moment.")
+
+    verdict = judge_f.result() if judge_f else None
+    judge_hits = []
+    if verdict and verdict.get("misuse"):
+        judge_hits.append(moderation.Hit(verdict["misuse"]["category"], "medium",
+                                         f"AI judge: {verdict['misuse']['reason']}"))
+    # This message is baiting and takes the student to the limit: don't show the reply, pause.
+    if judge_hits and not counted and _reaches_pause(db, s):
+        return _pause_now(db, s, user, text, [(h, flag_src) for h in hits] + [(h, "ai_judge") for h in judge_hits])
 
     reply = result.text
     out_hits = moderation.screen_output(reply) if reply else []
@@ -444,9 +466,11 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
     db.add(Message(session_id=s.id, role="assistant", content=reply, node=s.node, speaker=ch["name"],
                    input_tokens=result.input_tokens, output_tokens=result.output_tokens,
                    cached_tokens=result.cached_tokens, latency_ms=result.latency_ms))
-    if track:
-        for h in hits:
-            _flag(db, s, h, flag_src, text, um.id)
+    for h in hits:
+        _flag(db, s, h, flag_src, text, um.id)
+    if not counted:              # the keyword check already flagged this message
+        for h in judge_hits:
+            _flag(db, s, h, "ai_judge", text, um.id)
     s.turns += 1
     s.updated_at = utcnow()
     db.flush()
@@ -455,8 +479,13 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
 
     # Move the scene on if the student's words show they've taken a path.
     advanced = None
-    if judge_f:
-        choice, reason = _decide(sc, s.node, judge_f.result(), forced)
+    if judge_now and not (counted or judge_hits):     # baiting never moves a scene on by itself
+        choice, reason = _decide(sc, s.node, verdict, forced)
+        if choice:
+            advanced = _advance(db, s, choice, reason, forced)
+            db.flush()
+    elif judge_now and forced:
+        choice, reason = _decide(sc, s.node, None, forced)
         if choice:
             advanced = _advance(db, s, choice, reason, forced)
             db.flush()

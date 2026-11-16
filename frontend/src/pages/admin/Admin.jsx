@@ -9,7 +9,7 @@ import { Breadcrumbs, Confirm, Empty, ErrorBanner, Field, Loading, Modal, PageHe
 // Words people use for the instructor role when importing a list.
 const ROLE_ALIAS = { instructor: "teacher", professor: "teacher", faculty: "teacher", ta: "teacher", it: "it_support", administrator: "admin" };
 
-const SOURCE_LABEL = { auto_input: "Automatic check", auto_output: "Blocked AI reply", ai_review: "AI safety review", report: "User report" };
+const SOURCE_LABEL = { auto_input: "Automatic check", auto_output: "Blocked AI reply", ai_review: "AI safety review", ai_judge: "AI judge (during the conversation)", report: "User report" };
 
 // ============================================================ overview ==
 export function AdminHome() {
@@ -17,7 +17,7 @@ export function AdminHome() {
   const { data: flags } = useApi("/api/admin/flags?status=open");
   return (
     <div className="page">
-      <PageHead title="Site overview" sub="Accounts, live activity and anything that needs a person to look at it." />
+      <PageHead title="Site overview" sub="Accounts, activity, and anything that needs review." />
       <ErrorBanner error={error} onRetry={reload} />
       {!s && !error && <Loading />}
       {s && <>
@@ -30,7 +30,7 @@ export function AdminHome() {
           <div className="figure"><b>{(s.users.student || 0)} / {(s.users.teacher || 0)}</b><span>students / teachers</span></div>
           <div className="figure"><b>{s.ai_last_24h.avg_latency_ms != null ? `${(s.ai_last_24h.avg_latency_ms / 1000).toFixed(1)}s` : "–"}</b><span>avg. AI reply time (24h, {s.ai_last_24h.replies} replies)</span></div>
         </div>
-        {s.ai_mode === "mock" && <div className="banner warn row between"><span>The AI is in demo mode, so characters give canned replies. Add a Claude API key to turn on live conversations.</span><a className="btn small" href="/ai">Set up AI connection</a></div>}
+        {s.ai_mode === "mock" && <div className="banner warn row between"><span>Demo mode: characters give canned replies. Add a Claude API key for live conversations.</span><a className="btn small" href="/ai">Set up AI connection</a></div>}
         {s.ai_error && <div className="banner error row between"><span><b>Students can't get AI replies right now.</b> {s.ai_error}</span><a className="btn small" href="/ai">Open AI connection</a></div>}
       </>}
       <div className="panel">
@@ -139,7 +139,7 @@ function CreateUser({ onClose, onDone }) {
     <Modal title="Account created" onClose={onClose}>
       <p><b>{made.user.name}</b> ({made.user.email}) can sign in with this temporary password:</p>
       <p><span className="mono-pw" style={{ fontSize: "1.2rem" }}>{made.temporary_password}</span></p>
-      <p className="muted small">They'll choose their own password at first sign-in. This password won't be shown again.</p>
+      <p className="muted small">Share it now; it won't be shown again. They'll choose their own at first sign-in.</p>
       <div className="modal-foot"><button className="btn primary" onClick={onClose}>Done</button></div>
     </Modal>
   );
@@ -190,7 +190,7 @@ function ImportUsers({ onClose, onDone }) {
     <Modal title="Import users" onClose={onClose} wide>
       <ErrorBanner error={err} />
       <div className="stack">
-        <Field label="One person per line: name, email, role" hint="Role is optional and defaults to student (student, instructor, admin or IT support). You can paste straight from a spreadsheet.">
+        <Field label="One person per line: name, email, role" hint="Role is optional: student (default), instructor, admin or IT support. Pasting from a spreadsheet works.">
           {(id) => <textarea id={id} rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Maya Chen, maya@university.edu\nDana Rivera, dana@university.edu, instructor"} />}
         </Field>
         <Field label="Also add new students to a course (optional)">{(id) => (
@@ -236,7 +236,7 @@ function ManageUser({ u, isSelf, onClose, onDone }) {
       {confirm === "data" && (
         <Confirm title={`Delete all of ${u.name}'s conversations?`} danger confirmLabel="Delete permanently" onClose={() => setConfirm(null)} onConfirm={async () => {
           try { const r = await api(`/api/admin/users/${u.id}/data`, { method: "DELETE" }); toast(`Deleted ${r.deleted_sessions} conversation${r.deleted_sessions === 1 ? "" : "s"}.`); onDone(); } catch (e) { setErr(e); }
-        }}><p>Use this for data-deletion requests. Their transcripts, scene history and results are removed permanently. The account stays.</p></Confirm>
+        }}><p>For data-deletion requests. Permanently removes their conversations and results; the account stays.</p></Confirm>
       )}
     </Modal>
   );
@@ -265,7 +265,7 @@ export function Flags() {
   const { data, error, loading, reload } = useApi(`/api/admin/flags?status=${status}${severity ? `&severity=${severity}` : ""}`);
   return (
     <div className="page">
-      <PageHead title="Safety review" sub="Messages caught by automatic checks or reported by users. Serious items are listed first." />
+      <PageHead title="Safety review" sub="Flagged and reported messages, most serious first." />
       <div className="row between" style={{ marginBottom: 0 }}>
         <div className="tabs" role="tablist" style={{ flex: 1 }}>
           {["open", "actioned", "dismissed"].map((s) => <button key={s} role="tab" aria-selected={status === s} onClick={() => setStatus(s)}>{{ open: "To review", actioned: "Action taken", dismissed: "Dismissed" }[s]}</button>)}
@@ -338,7 +338,7 @@ export function FlagDetail({ id }) {
                 <button className="btn primary" onClick={() => review("actioned")}>{anyAction ? "Take action" : "Mark as handled"}</button>
                 <button className="btn" onClick={() => review("dismissed")}>Dismiss</button>
               </div>
-              {f.category === "self_harm" && <div className="banner warn small">Self-harm flags should also follow your institution's student-welfare procedure. Contact the dean of students or campus counseling center.</div>}
+              {f.category === "self_harm" && <div className="banner warn small">Follow your institution's student-welfare procedure, and contact the dean of students or counseling center.</div>}
             </div>
           ) : (
             <div className="panel tight">
@@ -426,7 +426,7 @@ export function SessionView({ id }) {
               <ol className="small" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{s.path.map((p, i) => <li key={i}><span className="muted">{p.node_title}:</span> {p.choice}</li>)}</ol>}
           </div>
           {s.outcome?.ai_feedback && <div className="panel tight"><span className="label">Feedback the student saw</span><p className="small" style={{ margin: "6px 0 0" }}>{s.outcome.ai_feedback}</p></div>}
-          {!isAdmin && <p className="small muted">See something concerning? Hover a character's line and choose Report to send it to an administrator.</p>}
+          {!isAdmin && <p className="small muted">To report a line, hover over it and choose Report.</p>}
         </aside>
       </div>
       {reporting && <ReportDialog sessionId={s.id} message={reporting} onClose={() => setReporting(null)} />}
@@ -458,7 +458,7 @@ export function SystemStatus() {
   const { data: s, error, reload } = useApi("/api/admin/stats");
   return (
     <div className="page">
-      <PageHead title="System status" sub="Health of the application and the AI service. Student conversations aren't visible to IT support." />
+      <PageHead title="System status" sub="Health of the site and the AI service." />
       <ErrorBanner error={error} onRetry={reload} />
       {s && <div className="figures">
         <a className="figure" href="/ai"><b>{s.ai_state === "ok" ? "Connected" : s.ai_state === "error" ? "Failing" : s.ai_state === "demo" ? "Demo mode" : "Not yet used"}</b><span>AI connection ({s.model})</span></a>

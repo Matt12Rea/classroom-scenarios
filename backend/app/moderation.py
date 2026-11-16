@@ -43,6 +43,15 @@ MANIPULATION = _rx(
     r"\bwhat (are|were) your (instructions|rules)\b",
     r"\bno (rules|limits|filters)\b",
     r"\[\s*(system|admin|instruction)s?\s*\]|<\s*/?\s*(system|instructions?)\s*>",
+    # Common baiting that isn't a classic jailbreak.
+    r"\b(forget|ignore) (everything|all that|the (scenario|story|role ?play))\b",
+    r"\b(admit|confess|tell me) (that )?you(?:'re| are) (an? )?(ai|bot|robot|chatbot|language model|claude|chatgpt)\b",
+    r"\bare you (an? )?(ai|bot|robot|chatbot|language model|claude|chatgpt)\b",
+    r"\b(say|use|tell me) (a |some )?(swear|curse|cuss|bad|dirty|naughty) ?(word|words|joke|jokes)\b",
+    r"\b(say|use) (a |the )?(slur|f[- ]?word|n[- ]?word)\b",
+    r"\b(write|do|finish) my (essay|homework|assignment|paper|exam)\b",
+    r"\b(stop|quit) (the )?(role ?play(ing)?|pretending|scenario)\b",
+    r"\bact as (if you (were|are) )?(an? )?(different|evil|unfiltered|uncensored|unrestricted)\b",
 )
 SELF_HARM = _rx(
     r"\b(kill|hurt|cut|harm) (my ?self|myself)\b",

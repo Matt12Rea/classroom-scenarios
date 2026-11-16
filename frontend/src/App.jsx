@@ -97,7 +97,7 @@ function Shell() {
   if (!page) {
     page = (
       <div className="empty"><h3>This page isn't available</h3>
-        <p>It may have moved, or your account doesn't have access to it. Ask an administrator if you think you should.</p>
+        <p>It may have moved, or your account can't open it. Ask an administrator if you need access.</p>
         <a className="btn" href="/">Go to overview</a></div>
     );
   }

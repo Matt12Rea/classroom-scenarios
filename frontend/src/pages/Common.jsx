@@ -21,29 +21,29 @@ export function Login() {
           <form className="login-form stack" onSubmit={submit} noValidate={false}>
             <div>
               <h1>Sign in</h1>
-              <p className="muted">Use the account your university gave you.</p>
+              <p className="muted">Use your university account.</p>
             </div>
             {notice && <div className="banner info" role="status">{notice}</div>}
             <ErrorBanner error={err} />
             <Field label="Email address">{(id) => <input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
             <Field label="Password">{(id) => <input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
             <button className="btn primary block" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-            <p className="small muted">Forgot your password? Your instructor or site administrator can reset it.</p>
+            <p className="small muted">Forgot your password? Your instructor or an administrator can reset it.</p>
           </form>
           <aside className="login-about">
             <Logo size={56} className="crest" />
             <h2>Practise the conversations your discipline depends on.</h2>
-            <p>Classroom Scenarios lets university students apply what they're learning in realistic role-plays written by their instructors: advising a bank on interest-rate risk, defending a study to an ethics board, explaining a genetic test result.</p>
+            <p>Role-plays written by your instructors, where you put course material to work: advise a bank on interest-rate risk, defend a study to an ethics board, explain a genetic test result.</p>
             <dl>
-              <dt>Students</dt><dd>talk with AI characters in their own words. What they say shapes where the scenario goes, and they get feedback on the outcome.</dd>
-              <dt>Instructors</dt><dd>write scenarios, assign them to courses and review each student's conversation.</dd>
-              <dt>Administrators</dt><dd>manage accounts and review anything flagged by safety checks.</dd>
+              <dt>Students</dt><dd>talk with AI characters. What they say decides where the scenario goes.</dd>
+              <dt>Instructors</dt><dd>write scenarios, assign them to courses, and review each conversation.</dd>
+              <dt>Administrators</dt><dd>manage accounts and review flagged messages.</dd>
             </dl>
           </aside>
         </div>
       </main>
       <footer className="login-foot">
-        <span>Conversations are stored for instruction and safety review. Names and email addresses are never sent to the AI service.</span>
+        <span>Conversations are stored for instruction and safety review. Names and emails are never sent to the AI.</span>
       </footer>
     </div>
   );
@@ -91,11 +91,11 @@ export function StudentHome() {
   const first = user.name.split(" ")[0];
   return (
     <div className="page">
-      <PageHead title="My scenarios" sub={`Welcome, ${first}. These are the scenarios your instructors have assigned. Read the brief, then handle the situation in your own words.`} />
+      <PageHead title="My scenarios" sub={`Welcome, ${first}. Read each brief, then handle the situation in your own words.`} />
       <ErrorBanner error={error || err} onRetry={error ? reload : null} />
       {loading && <Loading />}
       {data && data.length === 0 && (
-        <Empty title="Nothing assigned yet">When an instructor assigns you a scenario it will appear here.</Empty>
+        <Empty title="Nothing assigned yet">Scenarios your instructors assign will appear here.</Empty>
       )}
       {data?.length > 0 && (
         <div className="assignments">
@@ -141,44 +141,44 @@ export function Help() {
         <h2>Playing a scenario</h2>
         <ol>
           <li>Open a scenario from <a href="/">My scenarios</a> and read the setting and your goals.</li>
-          <li>Type to the character the way you would talk to a real person. Enter sends your message. You can describe actions too, for example “I sketch a Punnett square for them.”</li>
-          <li>There are no buttons to choose from. When your approach is clear, the scenario moves to the next scene and shows what it took from what you said.</li>
-          <li>Different approaches lead to different endings. Each scenario has a message limit; when you reach it, the scenario wraps up based on the conversation so far. At the end you'll see feedback and can try again.</li>
+          <li>Reply to the character as you would to a real person. You can describe actions, such as “I sketch a Punnett square.”</li>
+          <li>When your approach is clear, the scene moves on and shows what it took from your messages.</li>
+          <li>Each scenario has a message limit. At the end you'll get feedback and can try again.</li>
         </ol>
-        <p>If a character says something upsetting or inappropriate, hover over the message and choose Report.</p>
-        <p>Trying to make the AI break character or ignore its rules is flagged. After several flagged messages, the session pauses until an administrator reviews it.</p>
+        <p>To report a character's message, hover over it and choose Report.</p>
+        <p>Messages that try to make the AI break character are flagged. After several, the session pauses until an administrator reviews it.</p>
       </>}
       {(user.role === "teacher" || user.role === "admin") && <>
         <h2>Building a scenario</h2>
         <ol>
-          <li><b>Basics</b>: title, setting and what students should learn.</li>
-          <li><b>Characters</b>: who the AI plays. Personality notes shape how they react.</li>
-          <li><b>Scenes</b>: each scene is a situation. Add paths that lead to other scenes, and for each path describe what the student says or does to take it. Or mark the scene as an ending (success, partial or didn't succeed).</li>
-          <li><b>Review &amp; publish</b>: check the map, fix anything flagged, preview it yourself, publish, then assign it to a course.</li>
+          <li><b>Basics</b>: title, setting, objectives and message limits.</li>
+          <li><b>Characters</b>: who the AI plays and how they behave.</li>
+          <li><b>Scenes</b>: the situations. Give each scene paths to other scenes, and describe what a student says or does to take each one. Or make the scene an ending.</li>
+          <li><b>Review &amp; publish</b>: check the map, preview, publish, then assign to a course.</li>
         </ol>
         <h2>How scenes move on</h2>
-        <p>Students never see the paths. After each message, a separate AI check reads the scene's conversation and decides whether the student's own words show they've taken one of your paths. It can only pick from the paths you wrote, and the app makes the move, so the scenario always follows your structure. A scene can't move on before its minimum number of messages. When it reaches its message limit (or the student runs out of messages), a path is taken only if the student clearly showed it; otherwise the scene's fallback path is taken, which by default leads toward the worst outcome, so one-word answers or refusing to engage never earn a good ending. Set how many messages each scene lasts under Basics → Messages per scene.</p>
-        <p>When you preview a scenario, an instructor panel under the message box shows the current scene's paths, and each scene change shows why the AI matched it. You see the same notes in students' conversations; students don't.</p>
-        <p>The character never decides the outcome, and never lists options for the student.</p>
+        <p>Students never see your paths. After each message, an AI judge checks whether the student's words match one of them. It can only choose paths you wrote.</p>
+        <p>Each scene has a minimum and a maximum number of messages. At the maximum, if no path was clearly taken, the scene's fallback path is used. By default that's the path toward the worst ending, so not engaging never pays off.</p>
+        <p>In Preview, a panel below the message box lists the scene's paths, and each scene change explains why it happened. Students see neither.</p>
         <h2>Results</h2>
-        <p>Open a scenario's Results to see who has started and finished, which endings students reached, which paths their conversations took, and each student's full conversation. Export downloads a CSV.</p>
+        <p>Results show who has started and finished, which paths and endings students reached, and each full conversation. Export downloads a CSV.</p>
       </>}
       {user.role === "admin" && <>
         <h2>Safety review</h2>
-        <p>Messages are checked automatically. Attempts to bait the AI, self-harm language, threats, abusive language, shared contact details and blocked AI replies appear in Safety review, most serious first. Open a flag to read it in context, then dismiss it or take action: hide the message, pause the AI for that session, or disable the student's account.</p>
-        <p>When a student's messages are flagged several times in one session (3 by default, set with <code>AUTO_PAUSE_AFTER_FLAGS</code>), the session pauses automatically and a high-priority “Repeated misuse” flag appears. The student can't continue or restart the scenario until you open the conversation and choose Resume AI.</p>
+        <p>Flagged messages appear in Safety review, most serious first. Open one to see it in context, then dismiss it or act: hide the message, pause the session, or disable the account.</p>
+        <p>Messages are checked by keyword and, when Claude is connected, by the AI judge. After 3 flagged messages in one session (set with <code>AUTO_PAUSE_AFTER_FLAGS</code>), the session pauses and a “Repeated misuse” flag appears. Resume it from the conversation.</p>
         <h2>Accounts</h2>
-        <p>Create accounts one at a time or import a list. New accounts get a temporary password and must choose their own at first sign-in.</p>
+        <p>Add accounts one at a time or import a list. New accounts get a temporary password.</p>
         <h2>AI connection</h2>
-        <p>Characters are voiced by Claude through your institution's API key. Open <a href="/ai">AI connection</a> to add or replace the key, choose the model, or switch to demo mode. The key is tested before it's saved, stored encrypted, and can't be viewed again. If replies stop working, that page explains why, for example when the account needs more credit.</p>
+        <p>Characters are voiced by Claude using your institution's API key. Open <a href="/ai">AI connection</a> to add or replace the key, pick a model, or switch to demo mode. Keys are tested before saving and stored encrypted. If replies stop, that page shows why.</p>
       </>}
       {user.role === "it_support" && <>
         <h2>System status</h2>
-        <p>The status page shows AI usage and reply times for the last 24 hours, and the audit log. <a href="/ai">AI connection</a> shows whether Claude is answering and lets you run a test. Only administrators can change the key or model.</p>
-        <p>Student conversations aren't visible to IT support.</p>
+        <p>System status shows the last 24 hours of AI usage and reply times, plus the audit log. <a href="/ai">AI connection</a> shows whether Claude is answering and can run a test. Only administrators can change the key or model.</p>
+        <p>IT support can't see student conversations.</p>
       </>}
       <h2>Privacy</h2>
-      <p>Conversations are stored so instructors can give feedback. Only the student, their instructors and site administrators can read them. Messages are sent to the AI service to generate replies; names and emails are not.</p>
+      <p>Conversations are stored so instructors can give feedback. Only the student, their instructors and administrators can read them. Messages go to the AI service; names and emails don't.</p>
     </div>
   );
 }

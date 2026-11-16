@@ -46,7 +46,7 @@ export default function Play({ sessionId }) {
       const st = await api(`/api/sessions/${sessionId}/turn`, { method: "POST", body: { text: msg } });
       setData(st); setFailedText("");
       if (st.advanced) {
-        if (st.status === "completed") toast(st.advanced.forced ? "You've used all your messages, so the scenario has wrapped up." : "Scenario complete.");
+        if (st.status === "completed") toast(st.advanced.forced ? "Out of messages. The scenario has wrapped up." : "Scenario complete.");
         else toast(`New scene: ${st.node.title}`);
       }
     } catch (err) {
@@ -98,18 +98,18 @@ export default function Play({ sessionId }) {
           </ul>
         </section>
         <section className="brief-sec">
-          <h2>How this works</h2>
-          <p className="small" style={{ margin: 0 }}>There are no buttons to pick from. Talk and act as you would for real, and describe actions in your own words (for example, “I sketch the numbers on the whiteboard”). The scenario moves on when your approach is clear.</p>
+          <h2>How to play</h2>
+          <p className="small" style={{ margin: 0 }}>Reply in your own words, and describe actions when you need to. Scenes move on once your approach is clear.</p>
         </section>
         <section className="brief-sec">
           <h2>Progress</h2>
           <div className="progress-track" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
             aria-label="Scenes reached"><span style={{ width: `${pct}%` }} /></div>
           <p className="small muted" style={{ margin: "6px 0 0" }}>
-            {done ? "Finished." : `Scene ${state.path.length + 1}.`} {state.turns} of {state.max_turns} messages used.
+            {done ? "Finished. " : ""}{state.turns} of {state.max_turns} messages used.
           </p>
         </section>
-        <p className="small muted">Your conversation is saved so you can come back later. Your instructor and site administrators can read it.</p>
+        <p className="small muted">Progress saves automatically. Your instructor and administrators can read this conversation.</p>
       </aside>
 
       <section aria-label="Scenario">
@@ -122,8 +122,8 @@ export default function Play({ sessionId }) {
               <span className={`badge ${state.outcome.type}`}>{OUTCOME_LABEL[state.outcome.type]}</span>
               <h2>{state.outcome.label}</h2>
               {state.outcome.teacher_feedback && <p>{state.outcome.teacher_feedback}</p>}
-              {state.outcome.ai_feedback && (<><h3 style={{ marginTop: 16 }}>Feedback on how you did</h3><p>{state.outcome.ai_feedback}</p></>)}
-              <h3 style={{ marginTop: 16 }}>How your approach played out</h3>
+              {state.outcome.ai_feedback && (<><h3 style={{ marginTop: 16 }}>Feedback</h3><p>{state.outcome.ai_feedback}</p></>)}
+              <h3 style={{ marginTop: 16 }}>Your path</h3>
               <ol className="path">{state.path.map((p, i) => <li key={i}>{p.choice}</li>)}</ol>
               <div className="row" style={{ marginTop: 16 }}>
                 <a className="btn primary" href={backTo}>{isPreview ? "Back to editor" : "Back to my scenarios"}</a>
@@ -142,19 +142,21 @@ export default function Play({ sessionId }) {
                 <span className="small muted">“{failedText.slice(0, 60)}{failedText.length > 60 ? "…" : ""}”</span></div>
             )}
             {state.ai_paused ? (
-              <div className="banner warn"><b>This session is paused.</b> An administrator will review it. Your progress is saved, and you can continue if they resume it.</div>
+              <div className="banner warn">{isPreview
+                ? <><b>Preview paused.</b> A student's session would now wait for an administrator. Start a new preview from the editor.</>
+                : <><b>This session is paused for review.</b> You can continue once an administrator resumes it.</>}</div>
             ) : state.turns >= state.max_turns ? (
-              <div className="banner info row"><span>You've used all your messages. Finish to see where your approach led.</span>
+              <div className="banner info row"><span>You've used all your messages.</span>
                 <button className="btn primary small" onClick={finish}>Finish scenario</button></div>
             ) : (
               <form className="composer" onSubmit={send}>
                 <div className="grow">
                   <label htmlFor="say" className="sr-only">Your message to {ch.name}</label>
                   <textarea id="say" ref={inputRef} value={text} maxLength={MAX_CHARS} rows={2}
-                    placeholder={`Say or do something. ${ch.name} is listening…`} disabled={sending}
+                    placeholder={`Message ${ch.name}…`} disabled={sending}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) send(e); }} />
-                  <div className="count" aria-hidden="true">Press Enter to send, Shift+Enter for a new line{state.max_turns - state.turns <= 3 ? `. ${state.max_turns - state.turns} message${state.max_turns - state.turns === 1 ? "" : "s"} left; the scenario wraps up after your last one` : ""}{text.length > MAX_CHARS - 200 ? `. ${MAX_CHARS - text.length} characters left.` : ""}</div>
+                  <div className="count" aria-hidden="true">Enter to send, Shift+Enter for a new line{state.max_turns - state.turns <= 3 ? `. ${state.max_turns - state.turns} message${state.max_turns - state.turns === 1 ? "" : "s"} left` : ""}{text.length > MAX_CHARS - 200 ? `. ${MAX_CHARS - text.length} characters left` : ""}</div>
                 </div>
                 <button className="btn primary" type="submit" disabled={sending || !text.trim()} style={{ marginBottom: 22 }}>
                   {sending ? "Sending…" : "Send"}
@@ -176,10 +178,10 @@ function PathsPanel({ node }) {
   const wrap = node.wrap_after ? Math.max(0, node.wrap_after - node.turns_here) : null;
   return (
     <details className="insight-panel">
-      <summary>Instructor view: what moves this scene on</summary>
+      <summary>Instructor view: this scene's paths</summary>
       <p className="small muted">
-        {before > 0 ? `The scene can move on after ${before} more message${before === 1 ? "" : "s"}. ` : "The scene can move on now. "}
-        {wrap !== null ? `It wraps up with the closest path after ${wrap} more.` : "It has no per-scene message limit."}
+        {before > 0 ? `Can move on after ${before} more message${before === 1 ? "" : "s"}. ` : "Can move on now. "}
+        {wrap !== null ? `Wraps up after ${wrap} more.` : "No message limit for this scene."}
       </p>
       <ol>{node.paths.map((p) => <li key={p.label}><b>{p.label}</b>{p.signal && <span className="muted">: {p.signal}</span>}</li>)}</ol>
     </details>
@@ -203,7 +205,7 @@ export function ReportDialog({ sessionId, message, onClose }) {
       <div className="field">
         <label htmlFor="reason">What's wrong with it?</label>
         <textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)}
-          placeholder="For example: it was rude, upsetting, or not about the scenario." />
+          placeholder="For example: rude, upsetting, or off-topic." />
       </div>
       <div className="modal-foot">
         <button className="btn quiet" onClick={onClose}>Cancel</button>

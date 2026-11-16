@@ -143,26 +143,26 @@ export default function Editor({ id }) {
       {tab === "basics" && (
         <div className="panel stack" role="tabpanel">
           <Field label="Title" error={errFor("title")}>{(fid) => <input id={fid} type="text" value={sc.title} onChange={(e) => set({ title: e.target.value })} />}</Field>
-          <Field label="Short description" hint="Shown to students on their scenario list.">{(fid) => <textarea id={fid} rows={2} value={sc.description} onChange={(e) => set({ description: e.target.value })} />}</Field>
-          <Field label="Setting" hint="Where and when this happens, and who the student is in the story." error={errFor("setting")}>
+          <Field label="Short description" hint="Shown on students' scenario list.">{(fid) => <textarea id={fid} rows={2} value={sc.description} onChange={(e) => set({ description: e.target.value })} />}</Field>
+          <Field label="Setting" hint="Where and when, and who the student plays." error={errFor("setting")}>
             {(fid) => <textarea id={fid} rows={3} value={d.setting} placeholder="A community bank in Iowa as the Fed raises rates. You are a junior analyst advising the bank's president." onChange={(e) => setDef({ setting: e.target.value })} />}
           </Field>
           <div className={`field ${errFor("objectives") ? "invalid" : ""}`}>
             <span className="label">Learning objectives</span>
-            <span className="hint">What students should practise. Shown to students; used to shape feedback.</span>
+            <span className="hint">Shown to students and used for feedback.</span>
             <ListEditor items={d.objectives} onChange={(objectives) => setDef({ objectives })} placeholder="Objective" addLabel="Add objective" invalid />
             {errFor("objectives") && <span className="error-text">{errFor("objectives")}</span>}
           </div>
           <div className="field">
             <span className="label">Boundaries for the AI</span>
-            <span className="hint">Rules every character follows. Standard safety rules always apply on top of these.</span>
+            <span className="hint">Rules every character follows, on top of the standard safety rules.</span>
             <ListEditor items={d.boundaries} onChange={(boundaries) => setDef({ boundaries })} placeholder="Boundary" addLabel="Add boundary" />
           </div>
-          <Field label="What should the end-of-scenario feedback focus on?" hint="The AI uses this to write each student a short personalised debrief.">
+          <Field label="Feedback focus" hint="Guides the AI's end-of-scenario debrief.">
             {(fid) => <textarea id={fid} rows={2} value={d.feedback_guidance} placeholder="Did the student identify the bank's interest-rate risk and propose a realistic way to manage it?" onChange={(e) => setDef({ feedback_guidance: e.target.value })} />}
           </Field>
           <div className="grid-2">
-            <Field label="Message limit" hint="The most messages a student can send in one attempt. When it's reached, the scenario wraps up based on what the student said.">
+            <Field label="Message limit" hint="Per attempt. When it runs out, the scenario wraps up.">
               {(fid) => <input id={fid} type="number" min={1} max={200} value={sc.max_turns} style={{ maxWidth: 140 }} onChange={(e) => set({ max_turns: Number(e.target.value) || 1 })} />}
             </Field>
             <SceneLength d={d} setDef={setDef} />
@@ -182,7 +182,7 @@ export default function Editor({ id }) {
                   <Field label="Name" error={errFor(`characters.${i}.name`)}>{(fid) => <input id={fid} type="text" value={c.name} placeholder="Carol Brennan" onChange={(e) => upd({ name: e.target.value })} />}</Field>
                   <Field label="Who they are" error={errFor(`characters.${i}.role`)}>{(fid) => <input id={fid} type="text" value={c.role} placeholder="the bank's president" onChange={(e) => upd({ role: e.target.value })} />}</Field>
                 </div>
-                <Field label="Personality and background" hint="How they talk and react. What would make them open up or shut down?">
+                <Field label="Personality and background" hint="How they talk, and what makes them open up or shut down.">
                   {(fid) => <textarea id={fid} rows={3} value={c.traits} placeholder="Practical, not an economist. Wants plain English and a concrete numerical example." onChange={(e) => upd({ traits: e.target.value })} />}
                 </Field>
                 <div className="row end">
@@ -206,12 +206,12 @@ export default function Editor({ id }) {
       {tab === "review" && (
         <div className="stack" role="tabpanel">
           <div className="panel">
-            <div className="panel-head"><h2>Scenario map</h2><span className="small muted">Click a scene to edit it. Dashed outlines can't be reached.</span></div>
+            <div className="panel-head"><h2>Scenario map</h2><span className="small muted">Click a scene to edit it. Dashed scenes can't be reached.</span></div>
             <FlowMap def={d} onSelect={(nid) => { setScene(nid); setTab("scenes"); }} />
           </div>
           <div className="panel">
             <h2 style={{ marginBottom: 12 }}>Checks</h2>
-            {v.errors.length === 0 && v.warnings.length === 0 && <div className="banner ok">Everything looks good. Preview it, then publish.</div>}
+            {v.errors.length === 0 && v.warnings.length === 0 && <div className="banner ok">No problems found. Preview it, then publish.</div>}
             {v.errors.length > 0 && (
               <div className="banner error"><b>Fix before publishing</b>
                 <ul className="issues">{v.errors.map((e, i) => <li key={i}><button onClick={() => jump(e.field)}>{e.message}</button></li>)}</ul>
@@ -308,7 +308,7 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
             )}
           </Field>
         </div>
-        <Field label="What's happening" hint="Shown to the student as the scene opens, and given to the character as context." error={errFor(`nodes.${nid}.prompt`)}>
+        <Field label="What's happening" hint="Shown when the scene opens, and given to the character." error={errFor(`nodes.${nid}.prompt`)}>
           {(fid) => <textarea id={fid} rows={3} value={n.prompt} onChange={(e) => setNode(nid, { prompt: e.target.value })} />}
         </Field>
 
@@ -322,16 +322,16 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
 
         {!n.ending && <>
           <div className="grid-2">
-            <Field label="Minimum messages in this scene" hint="The scene can't move on before this. 1–3 makes students engage before the AI judges their approach." error={errFor(`nodes.${nid}.min_turns`)}>
+            <Field label="Minimum messages" hint="Before the scene can move on." error={errFor(`nodes.${nid}.min_turns`)}>
               {(fid) => <input id={fid} type="number" min={0} max={20} value={n.min_turns} style={{ maxWidth: 120 }} onChange={(e) => setNode(nid, { min_turns: Math.max(0, Number(e.target.value) || 0) })} />}
             </Field>
-            <Field label="Messages until the scene moves on" hint="The scene wraps up after this many messages. 0 means no limit for this scene. Set it for every scene at once under Basics." error={errFor(`nodes.${nid}.wrap_after`)}>
+            <Field label="Maximum messages" hint="Then the scene wraps up. 0 for no limit." error={errFor(`nodes.${nid}.wrap_after`)}>
               {(fid) => <input id={fid} type="number" min={0} max={50} value={n.wrap_after ?? 8} style={{ maxWidth: 120 }} onChange={(e) => setNode(nid, { wrap_after: Math.max(0, Number(e.target.value) || 0) })} />}
             </Field>
           </div>
           <div className="stack" style={{ marginTop: 8 }}>
             <span className="label">Paths out of this scene</span>
-            <p className="hint small muted" style={{ margin: 0 }}>Students never see these as buttons. After each message, the AI reads the conversation and checks whether the student's own words show they've taken one of these paths. Name each path as what the student did (for example, “Explained the bank's interest-rate risk”); students see that name when the scene moves on.</p>
+            <p className="hint small muted" style={{ margin: 0 }}>Students don't see these. After each message, the AI checks whether the student has taken one. Name each path as what the student did; they'll see it when the scene moves on.</p>
             {errFor(`nodes.${nid}.choices`) && <div className="banner error">{errFor(`nodes.${nid}.choices`)}</div>}
             {n.choices.map((c, j) => (
               <div className="decision-row" key={j}>
@@ -358,21 +358,21 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
                 </Field>
                 <button className="btn quiet small" aria-label={`Remove path ${j + 1}`} onClick={() => setNode(nid, { choices: n.choices.filter((_, k) => k !== j) })}>Remove</button>
                 <div className="sig">
-                  <Field label="What the student says or does to take this path" hint="Be specific. The AI only moves on when the student has actually done this, not just mentioned it." error={errFor(`nodes.${nid}.choices.${j}.signal`)}>
+                  <Field label="How the student takes this path" hint="Be specific about what they say or do." error={errFor(`nodes.${nid}.choices.${j}.signal`)}>
                     {(fid) => <textarea id={fid} rows={2} value={c.signal || ""} placeholder="The student explains that deposit costs rise with Fed rate increases while the fixed mortgage income doesn't, squeezing the bank's margin." onChange={(e) => setChoice(j, { signal: e.target.value })} />}
                   </Field>
                 </div>
                 <div className="fb">
-                  <Field label="Feedback when this path is taken (optional)">{(fid) => <input id={fid} type="text" value={c.feedback} placeholder="Shown to the student as the scene moves on" onChange={(e) => setChoice(j, { feedback: e.target.value })} />}</Field>
+                  <Field label="Feedback (optional)">{(fid) => <input id={fid} type="text" value={c.feedback} placeholder="Shown as the scene moves on" onChange={(e) => setChoice(j, { feedback: e.target.value })} />}</Field>
                 </div>
               </div>
             ))}
             <div><button className="btn small" onClick={() => setNode(nid, { choices: [...n.choices, { label: "", signal: "", next: "", feedback: "" }] })}>Add path</button></div>
             {n.choices.length > 0 && (
-              <Field label="If the student hasn't clearly taken a path when the scene wraps up" hint="For example after one-word answers, refusing to engage, or going off-topic. Automatic picks the path that can lead to the worst ending, so not engaging is never rewarded." error={errFor(`nodes.${nid}.fallback`)}>
+              <Field label="If no path is clear at the maximum" hint="Covers one-word answers, refusing to engage, or going off-topic." error={errFor(`nodes.${nid}.fallback`)}>
                 {(fid) => (
                   <select id={fid} value={n.fallback || ""} onChange={(e) => setNode(nid, { fallback: e.target.value })}>
-                    <option value="">Automatic: the path toward the worst outcome</option>
+                    <option value="">Automatic (path toward the worst ending)</option>
                     {n.choices.filter((c) => c.label.trim()).map((c) => <option key={c.label} value={c.label}>Take “{c.label}”</option>)}
                   </select>
                 )}
@@ -393,7 +393,7 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
               </div>
             </div>
           </div>
-          <Field label="Feedback for this ending" hint="What the student should take away. Shown on the results screen.">
+          <Field label="Feedback for this ending" hint="What the student should take away.">
             {(fid) => <textarea id={fid} rows={3} value={n.ending.feedback} onChange={(e) => setNode(nid, { ending: { ...n.ending, feedback: e.target.value } })} />}
           </Field>
         </>}
@@ -422,7 +422,7 @@ function SceneLength({ d, setDef }) {
     setDraft("");
   };
   return (
-    <Field label="Messages per scene" hint={values.length > 1 ? "Scenes currently differ. Enter a number to set every scene at once." : "How many messages before each scene moves on. Applies to every scene; you can change single scenes under Scenes."}>
+    <Field label="Messages per scene" hint={values.length > 1 ? "Scenes differ. Enter a number to set them all." : "Sets every scene. Change single scenes under Scenes."}>
       {(fid) => (
         <div className="row" style={{ flexWrap: "nowrap" }}>
           <input id={fid} type="number" min={0} max={50} value={shown} placeholder="Mixed" style={{ maxWidth: 120 }}

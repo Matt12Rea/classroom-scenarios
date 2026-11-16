@@ -22,7 +22,7 @@ export function TeacherHome() {
         </div>
         <div className="panel">
           <div className="panel-head"><h2>Recent activity</h2><a href="/scenarios">All scenarios</a></div>
-          {data.recent.length === 0 ? <Empty title="No activity yet">Assign a published scenario to a course and student activity will show up here.</Empty> : (
+          {data.recent.length === 0 ? <Empty title="No activity yet">Assign a published scenario to a course to see activity here.</Empty> : (
             <div className="table-wrap" style={{ border: 0 }}>
               <table>
                 <thead><tr><th>Student</th><th>Scenario</th><th>Status</th><th>Outcome</th><th>Last activity</th><th><span className="sr-only">Open</span></th></tr></thead>
@@ -56,7 +56,7 @@ function NewScenarioButton({ primary }) {
         <ErrorBanner error={err} />
         <div className="stack">
           <button className="choice" onClick={() => create("blank")}><span>Start from scratch<br /><span className="small muted" style={{ fontWeight: 400 }}>An empty scenario with standard safety boundaries.</span></span></button>
-          <button className="choice" onClick={() => create("example")}><span>Start from an example<br /><span className="small muted" style={{ fontWeight: 400 }}>A finished money-and-banking scenario you can edit to see how paths and scenes fit together.</span></span></button>
+          <button className="choice" onClick={() => create("example")}><span>Start from an example<br /><span className="small muted" style={{ fontWeight: 400 }}>A complete money-and-banking scenario to learn from and edit.</span></span></button>
         </div>
         <div className="modal-foot"><button className="btn quiet" onClick={() => setOpen(false)}>Cancel</button></div>
       </Modal>
@@ -133,7 +133,7 @@ export function Results({ id }) {
 function ResultsBody({ data }) {
   const s = data.summary;
   const pct = (n) => (s.completed ? (n / s.completed) * 100 : 0);
-  if (s.assigned === 0) return <Empty title="No students to report on">Assign this scenario to a course with students, or clear the filters.</Empty>;
+  if (s.assigned === 0) return <Empty title="No students to report on">Assign it to a course with students, or clear the filters.</Empty>;
   return <>
     <div className="figures">
       <div className="figure"><b>{s.started} / {s.assigned}</b><span>students started</span></div>
@@ -209,7 +209,7 @@ export function Classes() {
       </PageHead>
       <ErrorBanner error={error || err} onRetry={error ? reload : null} />
       {loading && <Loading />}
-      {data?.length === 0 && <Empty title="No courses yet">Create a course, then add students to it so you can assign scenarios.</Empty>}
+      {data?.length === 0 && <Empty title="No courses yet">Create a course and add students to start assigning scenarios.</Empty>}
       <div className="stack">
         {data?.map((c) => (
           <section className="panel" key={c.id}>
@@ -242,7 +242,7 @@ export function Classes() {
       {removing?.kind === "class" && (
         <Confirm title={`Delete ${removing.c.name}?`} danger confirmLabel="Delete course" onClose={() => setRemoving(null)} onConfirm={async () => {
           try { await api(`/api/classes/${removing.c.id}`, { method: "DELETE" }); toast("Course deleted."); reload(); } catch (e) { setErr(e); }
-        }}><p>Students stay in the system and keep their results, but lose access to scenarios assigned through this course.</p></Confirm>
+        }}><p>Students keep their accounts and results but lose access to this course's scenarios.</p></Confirm>
       )}
     </div>
   );
@@ -290,7 +290,7 @@ function AddStudents({ cls, onClose, onDone }) {
         <div className="banner warn">Added {result.added.length}. These emails don't match a student account, so ask an administrator to create them:
           <ul>{result.not_found.map((e) => <li key={e}>{e}</li>)}</ul></div>
       )}
-      <Field label="Student emails" hint="Paste one or more, separated by commas, spaces or new lines.">
+      <Field label="Student emails" hint="Separate with commas, spaces or new lines.">
         {(fid) => <textarea id={fid} rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="maya@university.edu, leo@university.edu" />}
       </Field>
       <div className="modal-foot"><button className="btn quiet" onClick={onClose}>Close</button><button className="btn primary" disabled={!text.trim()} onClick={submit}>Add students</button></div>

@@ -29,7 +29,7 @@ export default function AIConnection() {
   return (
     <div className="page narrow">
       <PageHead title="AI connection"
-        sub="How this site connects to Claude, the AI that voices scenario characters. The key is kept on the server and can't be viewed after it's saved." />
+        sub="The Claude connection that voices scenario characters. Saved keys stay on the server and can't be viewed." />
 
       <section className="panel section-panel" aria-labelledby="ai-status">
         <div className="panel-head">
@@ -60,9 +60,9 @@ export default function AIConnection() {
           <li>API keys don't expire. A key stops working only if it's deleted in the Anthropic Console or the account runs out of credit.</li>
           <li>In the Anthropic Console, under Billing, turn on <b>auto-reload</b> so credit is topped up before it runs out, and set a monthly spend limit you're comfortable with.</li>
           <li>Create a key just for this site, so you can replace it here without affecting anything else.</li>
-          <li>If replies stop, this page shows why, and administrators see a warning on their overview.</li>
+          <li>If replies stop, this page shows why and the admin overview shows a warning.</li>
         </ul>
-        <p className="small muted">What is sent to Claude: the scenario text and the student's messages in that conversation. Student names and email addresses are never sent.</p>
+        <p className="small muted">Claude receives the scenario text and the student's messages, never names or emails.</p>
       </section>
     </div>
   );
@@ -167,7 +167,7 @@ function ModelSection({ data, canEdit, onChange }) {
             onChange={() => setF({ ...f, mode: "mock", ai_review: false })} />
             <span><b>Demo</b><br /><span className="muted small">Canned replies, for training or trying the site without cost.</span></span></label>
         </fieldset>
-        <Field label="Model" hint="Haiku is fastest and cheapest and suits most course scenarios. Sonnet and Opus give richer replies but answer more slowly and cost more.">
+        <Field label="Model" hint="Haiku is fastest and cheapest, and suits most scenarios. Sonnet and Opus give richer replies but are slower and cost more.">
           {(id) => (
             <select id={id} value={f.model} disabled={!canEdit} onChange={(e) => setF({ ...f, model: e.target.value })}>
               {options.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -175,7 +175,7 @@ function ModelSection({ data, canEdit, onChange }) {
         </Field>
         <label className="check">
           <input type="checkbox" checked={f.ai_review} disabled={!canEdit || f.mode !== "claude"} onChange={(e) => setF({ ...f, ai_review: e.target.checked })} />
-          <span><b>Background safety review</b><br /><span className="muted small">After each reply, Claude double-checks the exchange and flags anything concerning for administrators. Adds no delay for students.</span></span>
+          <span><b>Background safety review</b><br /><span className="muted small">After each reply, Claude rechecks the exchange and flags anything concerning. No delay for students.</span></span>
         </label>
         {canEdit && <div><button className="btn primary" disabled={!changed}>Save settings</button></div>}
       </form>
