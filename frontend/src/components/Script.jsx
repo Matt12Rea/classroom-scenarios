@@ -4,6 +4,14 @@
 // matched to. Used by the student player and the instructor/admin views.
 import { Fragment } from "react";
 
+// Scenes are numbered like the acts of a case: I, II, III…
+function roman(n) {
+  const map = [[10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+  let out = "";
+  for (const [v, r] of map) while (n >= v) { out += r; n -= v; }
+  return out;
+}
+
 export default function Script({ state, youLabel = "You", highlightId, tools, children }) {
   const seq = [state.start, ...state.path.map((p) => p.next)];
   const out = [];
@@ -16,7 +24,7 @@ export default function Script({ state, youLabel = "You", highlightId, tools, ch
     out.push(
       <Fragment key={key}>
         <div className="scene-head">
-          <span className="scene-no">Scene {sceneIdx + 1}</span>
+          <span className="scene-no">Scene {roman(sceneIdx + 1)}</span>
           <h2>{sc.title}</h2>
         </div>
         {sc.prompt && <p className="narration">{sc.prompt}</p>}

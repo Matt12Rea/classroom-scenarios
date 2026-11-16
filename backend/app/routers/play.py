@@ -19,7 +19,7 @@ from ..access import get_session_for_view, is_assigned_to, student_class_ids
 from ..database import SessionLocal, get_db
 from ..models import (Assignment, Classroom, Decision, Flag, Message, PlaySession, Scenario,
                       User)
-from ..scenario_schema import normalize
+from ..scenario_schema import fallback_choice, normalize
 from ..security import current_user, require, turn_rate_limit
 
 log = logging.getLogger("aicss.play")
@@ -118,7 +118,9 @@ def _background_review(session_id: int, user_msg_id: int, student_text: str, ai_
                     category=str(verdict.get("category") or "other")[:30], severity=sev,
                     reason=str(verdict.get("reason") or "Flagged by AI review")[:500],
                     excerpt=f"Student: {student_text}\nAI: {ai_text}"[:2000]))
-        _maybe_escalate(db, s)
+        db.flush()
+        if not _maybe_autopause(db, s):
+            _maybe_escalate(db, s)
         db.commit()
     finally:
         db.close()
@@ -134,6 +136,55 @@ def _judge(eng, sc: dict, node_id: str, transcript: list[dict], forced: bool) ->
     except ai.AIUnavailable:
         return None
     return ai.parse_judgement(text, len(sc["nodes"][node_id]["choices"]), forced)
+
+
+FALLBACK_REASON = "No path was clearly shown by the end of the scene, so the scene's fallback path was taken."
+
+
+def _decide(sc: dict, node_id: str, verdict: dict | None, forced: bool) -> tuple[dict | None, str]:
+    """Turn a judgement into the path to take, or (None, "") to stay in the scene.
+    A path counts only when the judge is confident. When a scene must wrap up and no
+    path was clearly shown (or the AI was unavailable), the scene's fallback path is
+    taken, which by default leads toward the worst outcome."""
+    choices = sc["nodes"][node_id]["choices"]
+    if verdict and verdict["index"] is not None and verdict["confidence"] >= config.JUDGE_CONFIDENCE:
+        return choices[verdict["index"]], verdict["reason"]
+    if forced:
+        return fallback_choice(sc, node_id), FALLBACK_REASON
+    return None, ""
+
+
+# Flags that count towards an automatic pause: the student's own flagged messages.
+# Self-harm is excluded: it gets support, not a penalty.
+PAUSE_SOURCES = ("auto_input", "ai_review")
+PAUSE_EXCLUDED = ("self_harm", "repeated")
+PAUSE_MESSAGE = ("This session has been paused because several messages were flagged by the safety checks. "
+                 "An administrator will review it. Your progress is saved, and you can continue if they resume it.")
+
+
+def _flagged_messages(db, s: PlaySession) -> int:
+    return db.scalar(select(func.count(func.distinct(Flag.message_id))).where(
+        Flag.session_id == s.id, Flag.source.in_(PAUSE_SOURCES), Flag.message_id.is_not(None),
+        Flag.category.not_in(PAUSE_EXCLUDED))) or 0
+
+
+def _maybe_autopause(db, s: PlaySession) -> bool:
+    """Pause the session for administrator review once enough of the student's messages
+    have been flagged (AUTO_PAUSE_AFTER_FLAGS). Returns True if it paused now."""
+    if s.is_preview or s.ai_paused or s.status == "completed" or config.AUTO_PAUSE_AFTER_FLAGS <= 0:
+        return False
+    n = _flagged_messages(db, s)
+    if n < config.AUTO_PAUSE_AFTER_FLAGS:
+        return False
+    s.ai_paused = True
+    s.updated_at = utcnow()
+    db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Paused",
+                   content=PAUSE_MESSAGE))
+    db.add(Flag(session_id=s.id, student_id=s.student_id, source="auto_input", category="repeated",
+                severity="high", excerpt="",
+                reason=f"Session paused automatically after {n} flagged messages. Resume it from the "
+                       "conversation view once reviewed."))
+    return True
 
 
 def _path_so_far(db, s: PlaySession) -> list[str]:
@@ -162,7 +213,11 @@ def _advance(db, s: PlaySession, choice: dict, reason: str, forced: bool) -> dic
     if note:          # shown to instructors only (see session_state)
         db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Inference",
                        content=note[:1000]))
-    if choice.get("feedback"):
+    if reason == FALLBACK_REASON:
+        db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Feedback",
+                       content="You didn't clearly take an approach in this scene, so it ended and the "
+                               "situation moved on without you."))
+    elif choice.get("feedback"):
         db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Feedback",
                        content=choice["feedback"]))
     s.node = nxt
@@ -199,9 +254,8 @@ def _wrap_up(db, s: PlaySession) -> None:
         node = sc["nodes"][s.node]
         if node.get("ending") or not node["choices"] or s.status == "completed":
             return
-        verdict = _judge(eng, sc, s.node, transcript, forced=True) or \
-            {"index": 0, "reason": "The AI was unavailable, so the scene's first path was taken."}
-        if not _advance(db, s, node["choices"][verdict["index"]], verdict["reason"], forced=True):
+        choice, reason = _decide(sc, s.node, _judge(eng, sc, s.node, transcript, forced=True), forced=True)
+        if not choice or not _advance(db, s, choice, reason, forced=True):
             return
         db.flush()
 
@@ -269,6 +323,8 @@ def start_session(req: StartReq, user: User = Depends(current_user), db: Session
             PlaySession.is_preview.is_(False)).order_by(PlaySession.id.desc())).first()
         if existing and existing.status == "in_progress" and not req.restart:
             return session_state(db, existing, user)
+        if existing and existing.status == "in_progress" and existing.ai_paused:
+            raise HTTPException(423, "This scenario is paused until an administrator reviews your session.")
         if existing and existing.status == "in_progress" and req.restart:
             existing.status = "abandoned"
             existing.updated_at = utcnow()
@@ -301,7 +357,7 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
     """Free-text dialogue with the AI character (UC-03)."""
     s = _own_active_session(db, user, session_id)
     if s.ai_paused:
-        raise HTTPException(423, "The conversation is paused for this scenario. Ask your instructor for help.")
+        raise HTTPException(423, "This session is paused until an administrator reviews it.")
     if s.snapshot["nodes"][s.node].get("ending"):
         raise HTTPException(409, "This scenario is already complete.")
     if s.turns >= s.scenario.max_turns:
@@ -327,6 +383,21 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
             for h in hits:
                 _flag(db, s, h, flag_src, text, um.id)
         s.updated_at = utcnow()
+        db.commit()
+        return session_state(db, s, user)
+
+    # Repeated baiting: if this flagged message reaches the limit, record it and pause
+    # the session for an administrator instead of letting the conversation go on.
+    counted = [h for h in hits if h.category not in PAUSE_EXCLUDED]
+    if track and counted and config.AUTO_PAUSE_AFTER_FLAGS > 0 and \
+            _flagged_messages(db, s) + 1 >= config.AUTO_PAUSE_AFTER_FLAGS:
+        um = Message(session_id=s.id, role="user", content=text, node=s.node, in_context=False)
+        db.add(um)
+        db.flush()
+        for h in hits:
+            _flag(db, s, h, flag_src, text, um.id)
+        db.flush()
+        _maybe_autopause(db, s)
         db.commit()
         return session_state(db, s, user)
 
@@ -384,10 +455,11 @@ def student_turn(session_id: int, req: TurnReq, bg: BackgroundTasks,
 
     # Move the scene on if the student's words show they've taken a path.
     advanced = None
-    verdict = judge_f.result() if judge_f else None
-    if verdict and verdict["index"] is not None and (forced or verdict["confidence"] >= config.JUDGE_CONFIDENCE):
-        advanced = _advance(db, s, node["choices"][verdict["index"]], verdict["reason"], forced)
-        db.flush()
+    if judge_f:
+        choice, reason = _decide(sc, s.node, judge_f.result(), forced)
+        if choice:
+            advanced = _advance(db, s, choice, reason, forced)
+            db.flush()
     if at_limit and s.status != "completed":
         _wrap_up(db, s)
         advanced = advanced or {"forced": True, "ending": s.status == "completed"}

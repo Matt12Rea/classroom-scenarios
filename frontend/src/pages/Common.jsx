@@ -21,7 +21,7 @@ export function Login() {
           <form className="login-form stack" onSubmit={submit} noValidate={false}>
             <div>
               <h1>Sign in</h1>
-              <p className="muted">Use the account your school gave you.</p>
+              <p className="muted">Use the account your university gave you.</p>
             </div>
             {notice && <div className="banner info" role="status">{notice}</div>}
             <ErrorBanner error={err} />
@@ -31,7 +31,8 @@ export function Login() {
             <p className="small muted">Forgot your password? Your instructor or site administrator can reset it.</p>
           </form>
           <aside className="login-about">
-            <h2>About this service</h2>
+            <Logo size={56} className="crest" />
+            <h2>Practise the conversations your discipline depends on.</h2>
             <p>Classroom Scenarios lets university students apply what they're learning in realistic role-plays written by their instructors: advising a bank on interest-rate risk, defending a study to an ethics board, explaining a genetic test result.</p>
             <dl>
               <dt>Students</dt><dd>talk with AI characters in their own words. What they say shapes where the scenario goes, and they get feedback on the outcome.</dd>
@@ -145,6 +146,7 @@ export function Help() {
           <li>Different approaches lead to different endings. Each scenario has a message limit; when you reach it, the scenario wraps up based on the conversation so far. At the end you'll see feedback and can try again.</li>
         </ol>
         <p>If a character says something upsetting or inappropriate, hover over the message and choose Report.</p>
+        <p>Trying to make the AI break character or ignore its rules is flagged. After several flagged messages, the session pauses until an administrator reviews it.</p>
       </>}
       {(user.role === "teacher" || user.role === "admin") && <>
         <h2>Building a scenario</h2>
@@ -155,7 +157,7 @@ export function Help() {
           <li><b>Review &amp; publish</b>: check the map, fix anything flagged, preview it yourself, publish, then assign it to a course.</li>
         </ol>
         <h2>How scenes move on</h2>
-        <p>Students never see the paths. After each message, a separate AI check reads the scene's conversation and decides whether the student's own words show they've taken one of your paths. It can only pick from the paths you wrote, and the app makes the move, so the scenario always follows your structure. A scene can't move on before its minimum number of messages, and when it reaches its wrap-up limit (or the student runs out of messages), the closest path is taken.</p>
+        <p>Students never see the paths. After each message, a separate AI check reads the scene's conversation and decides whether the student's own words show they've taken one of your paths. It can only pick from the paths you wrote, and the app makes the move, so the scenario always follows your structure. A scene can't move on before its minimum number of messages. When it reaches its message limit (or the student runs out of messages), a path is taken only if the student clearly showed it; otherwise the scene's fallback path is taken, which by default leads toward the worst outcome, so one-word answers or refusing to engage never earn a good ending. Set how many messages each scene lasts under Basics → Messages per scene.</p>
         <p>When you preview a scenario, an instructor panel under the message box shows the current scene's paths, and each scene change shows why the AI matched it. You see the same notes in students' conversations; students don't.</p>
         <p>The character never decides the outcome, and never lists options for the student.</p>
         <h2>Results</h2>
@@ -164,6 +166,7 @@ export function Help() {
       {user.role === "admin" && <>
         <h2>Safety review</h2>
         <p>Messages are checked automatically. Attempts to bait the AI, self-harm language, threats, abusive language, shared contact details and blocked AI replies appear in Safety review, most serious first. Open a flag to read it in context, then dismiss it or take action: hide the message, pause the AI for that session, or disable the student's account.</p>
+        <p>When a student's messages are flagged several times in one session (3 by default, set with <code>AUTO_PAUSE_AFTER_FLAGS</code>), the session pauses automatically and a high-priority “Repeated misuse” flag appears. The student can't continue or restart the scenario until you open the conversation and choose Resume AI.</p>
         <h2>Accounts</h2>
         <p>Create accounts one at a time or import a list. New accounts get a temporary password and must choose their own at first sign-in.</p>
         <h2>AI connection</h2>

@@ -42,7 +42,7 @@ IRB_CASE = normalize({
                          "distress caused by exclusion?",
     "start": "deception",
     "nodes": {
-        "deception": {"title": "The deception question", "character": "adler", "min_turns": 2, "wrap_after": 8,
+        "deception": {"title": "The deception question", "character": "adler", "min_turns": 2, "wrap_after": 4,
                       "prompt": "Dr. Adler taps your consent form. \"This says participants will play a game with "
                                 "other students. They won't be. Tell me why the deception is necessary, and what "
                                 "you'll do about it.\"",
@@ -59,7 +59,7 @@ IRB_CASE = normalize({
                            "signal": "The student says the deception is harmless or standard practice without "
                                      "explaining why it's necessary or how participants will be debriefed.",
                            "next": "revise"}]},
-        "revise": {"title": "A second chance", "character": "adler", "min_turns": 1, "wrap_after": 6,
+        "revise": {"title": "A second chance", "character": "adler", "min_turns": 1, "wrap_after": 4,
                    "prompt": "Dr. Adler sets down her pen. \"The board can't approve deception without a "
                              "justification and a debriefing plan. Would you like to try again?\"",
                    "choices": [
@@ -70,7 +70,7 @@ IRB_CASE = normalize({
                         "signal": "The student refuses to change the protocol, argues the board is wrong, or "
                                   "withdraws it.",
                         "next": "tabled"}]},
-        "pool": {"title": "The subject pool", "character": "adler", "min_turns": 2, "wrap_after": 8,
+        "pool": {"title": "The subject pool", "character": "adler", "min_turns": 2, "wrap_after": 4,
                  "prompt": "\"Good. Next: the Intro Psych pool. Students need credits to pass, some first-years "
                            "are 17, and being excluded can leave people genuinely upset. How are you handling "
                            "that?\"",
@@ -129,7 +129,7 @@ GENETICS_CASE = normalize({
                          "testing options without steering the couple's decision?",
     "start": "results",
     "nodes": {
-        "results": {"title": "The results", "character": "ana", "min_turns": 2, "wrap_after": 8,
+        "results": {"title": "The results", "character": "ana", "min_turns": 2, "wrap_after": 4,
                     "prompt": "Ana grips the results letter. \"The nurse said we're both carriers. Does that mean "
                               "our baby has cystic fibrosis?\"",
                     "choices": [
@@ -145,7 +145,7 @@ GENETICS_CASE = normalize({
                          "signal": "The student says the baby will have CF, gives a wrong probability such as 50% "
                                    "or 100%, or says one in four of their children will be affected.",
                          "next": "confusion"}]},
-        "confusion": {"title": "Luis cuts in", "character": "luis", "min_turns": 1, "wrap_after": 6,
+        "confusion": {"title": "Luis cuts in", "character": "luis", "min_turns": 1, "wrap_after": 4,
                       "prompt": "Luis, quiet until now, cuts in. \"Wait. So if we have four kids, one of them gets "
                                 "it? We only want two.\"",
                       "choices": [
@@ -158,7 +158,7 @@ GENETICS_CASE = normalize({
                            "signal": "The student agrees with Luis's interpretation or moves on without correcting "
                                      "it.",
                            "next": "misinformed"}]},
-        "options": {"title": "What can we know?", "character": "ana", "min_turns": 2, "wrap_after": 8,
+        "options": {"title": "What can we know?", "character": "ana", "min_turns": 2, "wrap_after": 4,
                     "prompt": "Ana nods slowly. \"Okay. Is there a way to know for sure? And what would we even do "
                               "with that information?\"",
                     "choices": [
@@ -208,7 +208,7 @@ HISTORY_CASE = normalize({
                          "grounded in 1787 arguments?",
     "start": "debate",
     "nodes": {
-        "debate": {"title": "The deadlock", "character": "whitcombe", "min_turns": 2, "wrap_after": 8,
+        "debate": {"title": "The deadlock", "character": "whitcombe", "min_turns": 2, "wrap_after": 4,
                    "prompt": "Mr. Whitcombe finds you in the State House yard. \"Virginia has ten times Delaware's "
                              "people. Why should your state's vote count as much as ours?\"",
                    "choices": [

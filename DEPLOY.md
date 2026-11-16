@@ -318,6 +318,7 @@ Point an uptime monitor (UptimeRobot, Better Stack, etc.) at
 | `AI_MODE` | automatic | `mock` forces demo replies; blank uses Claude when a key exists |
 | `AI_MAX_RETRIES` | `2` | Automatic retries for temporary AI errors |
 | `AI_TIMEOUT_SECONDS` | `20` | Give up on a single AI request after this long |
+| `AUTO_PAUSE_AFTER_FLAGS` | `3` | Pause a session for administrator review after this many of the student's messages are flagged (0 = off) |
 | `JUDGE_CONFIDENCE` | `0.6` | How sure the AI must be (0–1) that a student's messages match a path before the scene moves on |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | | Creates the first administrator if none exists (the password is temporary) |
 | `LOAD_DEMO_DATA` | off | `true` adds the demo university (accounts for every role plus sample data) once |

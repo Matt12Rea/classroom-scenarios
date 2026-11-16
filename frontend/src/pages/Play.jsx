@@ -142,7 +142,7 @@ export default function Play({ sessionId }) {
                 <span className="small muted">“{failedText.slice(0, 60)}{failedText.length > 60 ? "…" : ""}”</span></div>
             )}
             {state.ai_paused ? (
-              <div className="banner warn">The conversation is paused for this scenario. Ask your instructor for help.</div>
+              <div className="banner warn"><b>This session is paused.</b> An administrator will review it. Your progress is saved, and you can continue if they resume it.</div>
             ) : state.turns >= state.max_turns ? (
               <div className="banner info row"><span>You've used all your messages. Finish to see where your approach led.</span>
                 <button className="btn primary small" onClick={finish}>Finish scenario</button></div>

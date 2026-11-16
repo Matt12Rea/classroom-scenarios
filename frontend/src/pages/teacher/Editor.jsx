@@ -161,9 +161,12 @@ export default function Editor({ id }) {
           <Field label="What should the end-of-scenario feedback focus on?" hint="The AI uses this to write each student a short personalised debrief.">
             {(fid) => <textarea id={fid} rows={2} value={d.feedback_guidance} placeholder="Did the student identify the bank's interest-rate risk and propose a realistic way to manage it?" onChange={(e) => setDef({ feedback_guidance: e.target.value })} />}
           </Field>
-          <Field label="Message limit" hint="The most messages a student can send in one attempt. When it's reached, the scenario wraps up based on what the student said.">
-            {(fid) => <input id={fid} type="number" min={1} max={200} value={sc.max_turns} style={{ maxWidth: 140 }} onChange={(e) => set({ max_turns: Number(e.target.value) || 1 })} />}
-          </Field>
+          <div className="grid-2">
+            <Field label="Message limit" hint="The most messages a student can send in one attempt. When it's reached, the scenario wraps up based on what the student said.">
+              {(fid) => <input id={fid} type="number" min={1} max={200} value={sc.max_turns} style={{ maxWidth: 140 }} onChange={(e) => set({ max_turns: Number(e.target.value) || 1 })} />}
+            </Field>
+            <SceneLength d={d} setDef={setDef} />
+          </div>
         </div>
       )}
 
@@ -322,7 +325,7 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
             <Field label="Minimum messages in this scene" hint="The scene can't move on before this. 1–3 makes students engage before the AI judges their approach." error={errFor(`nodes.${nid}.min_turns`)}>
               {(fid) => <input id={fid} type="number" min={0} max={20} value={n.min_turns} style={{ maxWidth: 120 }} onChange={(e) => setNode(nid, { min_turns: Math.max(0, Number(e.target.value) || 0) })} />}
             </Field>
-            <Field label="Wrap up after" hint="If no path is clear by this many messages, the closest one is taken. 0 means no limit for this scene." error={errFor(`nodes.${nid}.wrap_after`)}>
+            <Field label="Messages until the scene moves on" hint="The scene wraps up after this many messages. 0 means no limit for this scene. Set it for every scene at once under Basics." error={errFor(`nodes.${nid}.wrap_after`)}>
               {(fid) => <input id={fid} type="number" min={0} max={50} value={n.wrap_after ?? 8} style={{ maxWidth: 120 }} onChange={(e) => setNode(nid, { wrap_after: Math.max(0, Number(e.target.value) || 0) })} />}
             </Field>
           </div>
@@ -365,6 +368,16 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
               </div>
             ))}
             <div><button className="btn small" onClick={() => setNode(nid, { choices: [...n.choices, { label: "", signal: "", next: "", feedback: "" }] })}>Add path</button></div>
+            {n.choices.length > 0 && (
+              <Field label="If the student hasn't clearly taken a path when the scene wraps up" hint="For example after one-word answers, refusing to engage, or going off-topic. Automatic picks the path that can lead to the worst ending, so not engaging is never rewarded." error={errFor(`nodes.${nid}.fallback`)}>
+                {(fid) => (
+                  <select id={fid} value={n.fallback || ""} onChange={(e) => setNode(nid, { fallback: e.target.value })}>
+                    <option value="">Automatic: the path toward the worst outcome</option>
+                    {n.choices.filter((c) => c.label.trim()).map((c) => <option key={c.label} value={c.label}>Take “{c.label}”</option>)}
+                  </select>
+                )}
+              </Field>
+            )}
           </div>
         </>}
 
@@ -392,6 +405,33 @@ function ScenesTab({ d, setDef, setNode, scene, setScene, errFor, errors }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// One control for every scene's wrap-up limit; individual scenes can still differ.
+function SceneLength({ d, setDef }) {
+  const branching = Object.entries(d.nodes).filter(([, n]) => !n.ending);
+  const values = [...new Set(branching.map(([, n]) => n.wrap_after ?? 8))];
+  const [draft, setDraft] = useState("");
+  const shown = draft !== "" ? draft : values.length === 1 ? String(values[0]) : "";
+  const apply = (v) => {
+    const num = Math.max(0, Math.min(50, Number(v) || 0));
+    const nodes = Object.fromEntries(Object.entries(d.nodes).map(([id, n]) =>
+      [id, n.ending ? n : { ...n, wrap_after: num, min_turns: Math.min(n.min_turns, num || n.min_turns) }]));
+    setDef({ nodes });
+    setDraft("");
+  };
+  return (
+    <Field label="Messages per scene" hint={values.length > 1 ? "Scenes currently differ. Enter a number to set every scene at once." : "How many messages before each scene moves on. Applies to every scene; you can change single scenes under Scenes."}>
+      {(fid) => (
+        <div className="row" style={{ flexWrap: "nowrap" }}>
+          <input id={fid} type="number" min={0} max={50} value={shown} placeholder="Mixed" style={{ maxWidth: 120 }}
+            onChange={(e) => setDraft(e.target.value)} onBlur={() => draft !== "" && apply(draft)}
+            onKeyDown={(e) => { if (e.key === "Enter" && draft !== "") apply(draft); }} />
+          {draft !== "" && <button className="btn small" onClick={() => apply(draft)}>Apply to all scenes</button>}
+        </div>
+      )}
+    </Field>
   );
 }
 

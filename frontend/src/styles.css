@@ -4,19 +4,23 @@
    so scenario content reads like a case file and is distinct from controls.
    Both fonts are self-hosted: no third-party requests from students' browsers. */
 :root {
-  --canvas: #eef1f5;
+  /* Library green and brass on cool stone: a university casebook, not a dashboard. */
+  --canvas: #edefea;
   --surface: #ffffff;
-  --surface-2: #f7f8fa;
-  --ink: #1a2233;
-  --ink-2: #485266;
-  --ink-3: #5b667c;
-  --line: #d3d9e2;
-  --line-2: #e6eaf0;
-  --brand: #17325c;
-  --brand-hover: #0f2647;
-  --brand-tint: #e6ecf5;
-  --brand-ink: #f3f6fb;
-  --brand-dim: #b6c3d8;
+  --surface-2: #f6f7f3;
+  --ink: #1c2522;
+  --ink-2: #47524d;
+  --ink-3: #5a6560;
+  --line: #d3d8d0;
+  --line-2: #e5e8e1;
+  --brand: #1e3a31;
+  --brand-hover: #13281f;
+  --brand-tint: #e5ede8;
+  --brand-ink: #eef3ef;
+  --brand-dim: #b9c9c0;
+  --brass: #a07d35;          /* rules, crest, numerals: decoration only */
+  --brass-ink: #7f6127;      /* brass dark enough for text on white */
+  --brass-soft: #f3ecdc;
   --focus: #2f6fde;
   --ok: #1e6b47;
   --ok-soft: #e2f1e8;
@@ -24,10 +28,10 @@
   --warn-soft: #fbf1dc;
   --bad: #b3261e;
   --bad-soft: #fbe9e7;
-  --info: #24508f;
-  --info-soft: #e7eef8;
-  --r-sm: 4px;
-  --r: 6px;
+  --info: #2b5876;
+  --info-soft: #e6eef3;
+  --r-sm: 3px;
+  --r: 4px;
   --ui: "Public Sans Variable", "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   --case: "Source Serif 4 Variable", "Source Serif 4", Georgia, "Times New Roman", serif;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
@@ -460,3 +464,106 @@ a.figure:hover { background: var(--surface-2); color: inherit; }
   .shell { display: block; } body { background: #fff; }
   .script, .panel, .brief { border: 0; padding: 0; }
 }
+
+
+/* ======================================================================
+   Academic identity layer: serif headings, crest, casebook player.
+   Placed last so it refines the components above without fighting them.
+   ====================================================================== */
+h1, h2, .wordmark, .figure b, .modal h2 { font-family: var(--case); }
+h1 { font-size: 2rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
+h2 { font-weight: 600; letter-spacing: -0.005em; }
+h3 { font-weight: 650; }
+a { color: var(--brand); text-decoration-color: color-mix(in srgb, var(--brand) 40%, transparent); }
+a:hover { color: var(--brand-hover); text-decoration-color: currentColor; }
+.btn.quiet { color: var(--brand); }
+.btn.quiet:hover { background: var(--brand-tint); }
+
+/* masthead: green with a brass underline and a serif wordmark */
+.masthead { border-bottom: 3px solid var(--brass); box-shadow: 0 1px 0 var(--brand-hover); }
+.wordmark { font-size: 1.25rem; font-weight: 600; letter-spacing: 0; gap: 12px; }
+.wordmark .logo { color: var(--brass); }
+.masthead .avatar { background: var(--brass-soft); color: var(--brand); font-family: var(--case); }
+
+/* sidebar: brass marker for the current page */
+.side { background: var(--surface-2); }
+.nav-label { font-family: var(--case); font-style: italic; font-weight: 400; font-size: 0.9375rem; color: var(--ink-2); }
+.nav-group a[aria-current="page"] { border-left-color: var(--brass); background: var(--surface); color: var(--brand); box-shadow: inset 0 0 0 1px var(--line-2); }
+
+/* page headings sit on a short brass rule instead of a full-width line */
+.page-head { border-bottom: 0; padding-bottom: 0; position: relative; }
+.page-head::after { content: ""; position: absolute; left: 0; bottom: calc(-1 * var(--s3)); width: 56px; height: 3px; background: var(--brass); }
+.page-head { margin-bottom: var(--s6); }
+.page-head p { font-family: var(--case); font-size: 1.0625rem; line-height: 1.55; }
+.editor-bar h1 { font-size: 1.75rem; }
+
+.panel-head h2, .section-panel > h2 { font-size: 1.25rem; }
+.figure b { font-weight: 600; font-size: 2rem; }
+
+/* controls: more formal corners, green primary */
+.btn { border-radius: var(--r-sm); }
+.btn.primary { box-shadow: inset 0 -2px 0 var(--brand-hover); }
+.tabs button[aria-selected="true"] { border-bottom-color: var(--brass); color: var(--brand); }
+.tabs [aria-selected="true"] .step { background: var(--brand); }
+.modal { border-top-color: var(--brass); }
+
+/* ---------- sign in: a green panel with the crest beside the form ---------- */
+.login { background: var(--canvas); }
+.login-card { border-top: 0; overflow: hidden; box-shadow: 0 1px 0 var(--line); grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+.login-form { order: 2; }
+.login-form h1 { font-size: 2rem; }
+.login-about { order: 1; background: var(--brand); color: var(--brand-ink); border-left: 0; border-right: 4px solid var(--brass); padding: var(--s7) var(--s6); }
+.login-about .crest { color: var(--brass); margin-bottom: var(--s5); }
+.login-about h2 { font-size: 1.75rem; color: #fff; margin-bottom: var(--s4); line-height: 1.2; }
+.login-about p, .login-about dd { color: var(--brand-dim); }
+.login-about dt { color: #fff; font-family: var(--case); font-size: 1.0625rem; }
+@media (max-width: 760px) { .login-about { border-right: 0; border-bottom: 4px solid var(--brass); } }
+
+/* ---------- student home: a reading list ---------- */
+.assignments { border-top: 3px solid var(--brand); }
+.assignment-class { font-family: var(--case); font-style: italic; font-size: 0.9375rem; color: var(--brass-ink); }
+.assignment h2 { font-size: 1.375rem; }
+
+/* ---------- the player, set like a casebook ---------- */
+.brief { border-top: 3px solid var(--brand); }
+.brief h1 { font-size: 1.5rem; line-height: 1.2; }
+.brief-sec h2 { font-family: var(--case); font-style: italic; font-weight: 400; font-size: 1rem; color: var(--brass-ink); }
+.progress-track > span { background: var(--brass); }
+
+.script { border-top: 3px solid var(--brand); padding-top: var(--s6); }
+.scene-head { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: var(--s4); margin-bottom: var(--s3); border-top: 0; padding-top: var(--s5); }
+.scene-head::after { content: ""; grid-column: 1 / -1; height: 3px; margin-top: var(--s2);
+  background: linear-gradient(var(--brass), var(--brass)) no-repeat 0 0 / 56px 3px,
+              linear-gradient(var(--line), var(--line)) no-repeat 0 1px / 100% 1px; }
+.scene-no { background: none; padding: 0; border-radius: 0; font-family: var(--case); font-style: italic; font-weight: 400; font-size: 1rem; color: var(--brass-ink); }
+.scene-head h2 { font-size: 1.5rem; }
+.narration { font-size: 1.125rem; line-height: 1.65; color: var(--ink); }
+
+.speech { grid-template-columns: 148px minmax(0, 1fr); padding: 12px var(--s3); }
+.cue { font-family: var(--case); font-size: 1rem; font-weight: 600; color: var(--ink); text-align: right; padding-right: var(--s2); border-right: 1px solid var(--line-2); padding-top: 0; }
+.speech.you { background: var(--brand-tint); }
+.speech.you .cue { color: var(--brand); border-right-color: color-mix(in srgb, var(--brand) 25%, transparent); }
+.dialogue { font-size: 1rem; }
+@media (max-width: 600px) { .cue { text-align: left; border-right: 0; } }
+
+.decision-line { background: var(--brass-soft); border: 0; border-left: 4px solid var(--brass); border-radius: 0; }
+.decision-who { font-family: var(--case); font-style: italic; font-weight: 400; color: var(--brass-ink); font-size: 1rem; }
+.decision-what { font-family: var(--case); font-size: 1.0625rem; }
+.note-line { border-left-color: var(--line); font-style: italic; }
+
+.composer { border-top: 3px solid var(--brand); }
+
+/* the outcome reads like an instructor's assessment */
+.ending { border-top-width: 0; border-left: 6px solid; padding: var(--s6); background: var(--surface); }
+.ending.success { border-left-color: var(--ok); }
+.ending.partial { border-left-color: var(--warn); }
+.ending.fail { border-left-color: var(--bad); }
+.ending h2 { font-size: 1.875rem; }
+.ending h3 { font-family: var(--case); font-style: italic; font-weight: 400; font-size: 1.0625rem; color: var(--brass-ink); }
+
+/* editor + analytics accents */
+.scene-list button[aria-current="true"] { border-left-color: var(--brass); }
+.scene-list b, .char-card .label { font-family: var(--case); }
+.scene-list b { font-size: 1.0625rem; font-weight: 600; }
+.hbar .track span { background: var(--brand); }
+.bulkbar { background: var(--brand); border-top: 3px solid var(--brass); }

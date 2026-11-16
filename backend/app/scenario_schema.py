@@ -12,7 +12,7 @@ Shape produced by the teacher's scenario builder:
   "start": "briefing",
   "nodes": {
     "briefing": {"title": "The question", "prompt": "Carol asks whether to write more fixed-rate loans.",
-                 "character": "carol", "min_turns": 2, "wrap_after": 8,
+                 "character": "carol", "min_turns": 2, "wrap_after": 4,
                  "choices": [{"label": "Explained the interest-rate risk",
                               "signal": "The student explains that rising deposit costs squeeze fixed loan income.",
                               "next": "sound", "feedback": ""}],
@@ -26,7 +26,10 @@ Students never see the choices. They are "paths": after each message the
 application asks a judge model whether the student's own words show they have
 taken one of them ("signal" describes what that looks like). "min_turns" is the
 fewest messages before a scene can move on; "wrap_after" is the most, after
-which the closest path is taken (0 = no per-scene limit).
+which the scene moves on (0 = no per-scene limit). At that point a path is
+taken only if the student has actually done what it describes; otherwise the
+scene's "fallback" path is taken: the path with that label, or, if blank, the
+path whose branch leads to the worst ending (see fallback_choice).
 
 The original engine's format (single "character", choices as a dict, ending as a
 string) is still accepted and converted by normalize(). Choices without a
@@ -108,6 +111,7 @@ def normalize(d: dict) -> dict:
             "character": str(n.get("character") or default_char),
             "min_turns": min_turns,
             "wrap_after": wrap_after,
+            "fallback": "" if ending else str(n.get("fallback") or ""),
             "choices": [] if ending else [
                 {"label": str(c.get("label") or ""), "signal": str(c.get("signal") or ""),
                  "next": str(c.get("next") or ""), "feedback": str(c.get("feedback") or "")}
@@ -115,6 +119,41 @@ def normalize(d: dict) -> dict:
             "ending": ending,
         }
     return out
+
+
+OUTCOME_RANK = {"fail": 0, "partial": 1, "success": 2}
+
+
+def worst_outcome_from(d: dict, start: str) -> int:
+    """Rank of the worst ending reachable from a scene (fail 0, partial 1, success 2)."""
+    nodes, seen, q, worst = d["nodes"], {start}, deque([start]), None
+    while q:
+        n = nodes.get(q.popleft())
+        if not n:
+            continue
+        if n.get("ending"):
+            r = OUTCOME_RANK.get(n["ending"].get("type"), 1)
+            worst = r if worst is None else min(worst, r)
+        for c in n.get("choices", []):
+            if c.get("next") in nodes and c["next"] not in seen:
+                seen.add(c["next"])
+                q.append(c["next"])
+    return 1 if worst is None else worst
+
+
+def fallback_choice(d: dict, node_id: str) -> dict | None:
+    """The path a scene takes when it wraps up and the student hasn't clearly taken any
+    path: the one the instructor chose, or the path that can lead to the worst ending
+    (the last such path on a tie). Not engaging should never be rewarded."""
+    n = d["nodes"][node_id]
+    choices = [c for c in n.get("choices", []) if c.get("next") in d["nodes"]]
+    if not choices:
+        return None
+    chosen = next((c for c in choices if n.get("fallback") and c["label"] == n["fallback"]), None)
+    if chosen:
+        return chosen
+    ranked = [(worst_outcome_from(d, c["next"]), -i, c) for i, c in enumerate(choices)]
+    return min(ranked, key=lambda x: (x[0], x[1]))[2]
 
 
 def validate(title: str, d: dict) -> dict:
@@ -178,6 +217,8 @@ def validate(title: str, d: dict) -> dict:
             if c["label"].strip() and not c["signal"].strip():
                 warn(f"{f}.choices.{j}.signal", f"{name}, path “{c['label']}”: describe what the student says or "
                                                 "does to take it. Without that, it's matched on its name alone.")
+        if n["fallback"] and n["fallback"] not in labels:
+            err(f"{f}.fallback", f"{name}: the path to take when nothing is clear no longer exists. Pick another.")
         if n["wrap_after"] and n["wrap_after"] < max(1, n["min_turns"]):
             err(f"{f}.wrap_after", f"{name} wraps up before students reach the minimum number of messages. "
                                    "Raise the wrap-up limit or lower the minimum.")
@@ -234,7 +275,7 @@ EXAMPLE = normalize({
                          "realistic way to manage the risk rather than refusing to lend?",
     "start": "briefing",
     "nodes": {
-        "briefing": {"title": "The president's question", "character": "carol", "min_turns": 2, "wrap_after": 8,
+        "briefing": {"title": "The president's question", "character": "carol", "min_turns": 2, "wrap_after": 4,
                      "prompt": "Carol waves you into her office. \"Rates are going up, so a 6% fixed mortgage sounds "
                                "like a great deal for us. Should we write as many of these as we can?\"",
                      "choices": [
@@ -252,7 +293,7 @@ EXAMPLE = normalize({
                                     "argues that rising rates make fixed-rate loans better for the bank, without "
                                     "raising the cost of the bank's own funding.",
                           "next": "squeeze"}]},
-        "options": {"title": "So what do we do?", "character": "carol", "min_turns": 2, "wrap_after": 8,
+        "options": {"title": "So what do we do?", "character": "carol", "min_turns": 2, "wrap_after": 4,
                     "prompt": "Carol leans back. \"All right, I follow. But if we don't offer something, the builder "
                               "takes his buyers to the credit union. What do you recommend?\"",
                     "choices": [
@@ -266,7 +307,7 @@ EXAMPLE = normalize({
                          "signal": "The student says the bank should stop offering mortgages, with no alternative "
                                    "that keeps the business.",
                          "next": "refused"}]},
-        "squeeze": {"title": "Eighteen months later", "character": "carol", "min_turns": 2, "wrap_after": 6,
+        "squeeze": {"title": "Eighteen months later", "character": "carol", "min_turns": 2, "wrap_after": 4,
                     "prompt": "Eighteen months on, the bank is paying 7% on new CDs while the mortgage book still "
                               "earns 6%. Carol drops a report on your desk. \"We're losing money on these loans. "
                               "What happened?\"",

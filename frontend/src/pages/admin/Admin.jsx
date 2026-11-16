@@ -338,7 +338,7 @@ export function FlagDetail({ id }) {
                 <button className="btn primary" onClick={() => review("actioned")}>{anyAction ? "Take action" : "Mark as handled"}</button>
                 <button className="btn" onClick={() => review("dismissed")}>Dismiss</button>
               </div>
-              {f.category === "self_harm" && <div className="banner warn small">Self-harm flags should also follow your school's safeguarding procedure. Contact the student's counselor or designated safeguarding lead.</div>}
+              {f.category === "self_harm" && <div className="banner warn small">Self-harm flags should also follow your institution's student-welfare procedure. Contact the dean of students or campus counseling center.</div>}
             </div>
           ) : (
             <div className="panel tight">

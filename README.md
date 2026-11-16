@@ -104,8 +104,18 @@ See **[DEPLOY.md](DEPLOY.md)**. In short:
 the application checks the pick, records it in `decisions`, and moves the student on. A scene moves on when:
 
 * the judge picks a path with confidence ≥ `JUDGE_CONFIDENCE` (default 0.6) after the scene's `min_turns`, or
-* the scene reaches its `wrap_after` limit (default 8 messages), when the judge must pick the closest path, or
-* the student uses the scenario's last message, when every remaining scene takes its closest path until an ending.
+* the scene reaches its `wrap_after` limit (default 8 messages; "Messages per scene" under Basics sets every scene
+  at once; the demo uses 4), or
+* the student uses the scenario's last message, when every remaining scene is wrapped up the same way until an ending.
+
+At a wrap-up, a path is taken only if the student clearly showed it. Otherwise the scene's *fallback* path is
+taken: the one the instructor picked, or by default the path that can lead to the worst ending
+(`scenario_schema.fallback_choice`). One-word answers, refusing to engage and baiting therefore never earn a good
+ending, and the student is told the scene moved on without them.
+
+**Repeated baiting.** When `AUTO_PAUSE_AFTER_FLAGS` (default 3) of a student's messages in one session have been
+flagged, the session pauses: no AI reply, no restart, and a high-priority "Repeated misuse" flag for administrators,
+who can resume it from the conversation view.
 
 Students never see the paths or the judge's reasoning. Instructors see both: in Preview (an "Instructor view" panel under the
 message box) and in students' transcripts ("Why the scene moved on"). In demo mode (no API key) the judge matches words

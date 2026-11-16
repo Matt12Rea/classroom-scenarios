@@ -307,6 +307,9 @@ def pause_session(session_id: int, req: PauseReq, user: User = Depends(admin), d
     s = db.get(PlaySession, session_id)
     if not s:
         raise HTTPException(404, "Session not found.")
+    if s.ai_paused and not req.paused and s.status == "in_progress":
+        db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Resumed",
+                       content="An administrator reviewed this session and resumed it. You can continue."))
     s.ai_paused = req.paused
     audit(db, user, "session.pause" if req.paused else "session.resume", f"session:{s.id}")
     db.commit()

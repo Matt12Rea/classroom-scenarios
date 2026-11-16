@@ -114,14 +114,14 @@ export function ListEditor({ items, onChange, placeholder, addLabel, invalid }) 
 }
 
 /** The product mark: a path that branches into outcomes (problem-solving pathing). */
-export function Logo({ size = 26 }) {
+// The crest: a shield holding an open book, drawn in one colour (currentColor).
+export function Logo({ size = 28, className = "logo" }) {
   return (
-    <svg className="logo" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <rect width="32" height="32" rx="6" fill="currentColor" opacity=".14" />
-      <path d="M7 16h7m0 0 6-6.5H25M14 16l6 6.5H25" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="7" cy="16" r="2.6" fill="currentColor" />
-      <circle cx="25" cy="9.5" r="2.6" fill="currentColor" />
-      <circle cx="25" cy="22.5" r="2.6" fill="currentColor" />
+    <svg className={className} width={size} height={size * 36 / 32} viewBox="0 0 32 36" aria-hidden="true" focusable="false">
+      <path d="M16 1.5 29 5v11.5c0 8.2-5.6 14.6-13 18-7.4-3.4-13-9.8-13-18V5Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M16 12.5c-2.6-1.7-5.4-2.2-8.2-1.8v12c2.8-.4 5.6.1 8.2 1.8 2.6-1.7 5.4-2.2 8.2-1.8v-12c-2.8-.4-5.6.1-8.2 1.8Z" fill="currentColor" opacity=".22" />
+      <path d="M16 12.5c-2.6-1.7-5.4-2.2-8.2-1.8v12c2.8-.4 5.6.1 8.2 1.8m0-12c2.6-1.7 5.4-2.2 8.2-1.8v12c-2.8-.4-5.6.1-8.2 1.8m0-12v12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M16 5.2v3.2M14.4 6.8h3.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }

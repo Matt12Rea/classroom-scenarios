@@ -87,6 +87,10 @@ JUDGE_CONFIDENCE = float(os.getenv("JUDGE_CONFIDENCE", "0.6"))
 MODERATION_AI_REVIEW = _bool("MODERATION_AI_REVIEW", True)
 # Number of auto-flags in one session before the session is escalated to "high".
 ESCALATE_AFTER_FLAGS = int(os.getenv("ESCALATE_AFTER_FLAGS", "3"))
+# After this many of a student's messages in one session are flagged (baiting the AI,
+# abuse, etc.; not self-harm), the session is paused until an administrator resumes
+# it. 0 turns automatic pausing off.
+AUTO_PAUSE_AFTER_FLAGS = int(os.getenv("AUTO_PAUSE_AFTER_FLAGS", "3"))
 
 # ---- web ------------------------------------------------------------------
 # The public address of the site, e.g. https://scenarios.youruniversity.edu
