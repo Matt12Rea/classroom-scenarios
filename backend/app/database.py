@@ -1,5 +1,7 @@
 """Database connection. SQLAlchemy lets the same code run on SQLite (dev) and
 PostgreSQL/MySQL (production) by changing DATABASE_URL only."""
+from contextlib import contextmanager
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
@@ -28,10 +30,29 @@ class Base(DeclarativeBase):
 
 
 def get_db():
-    """FastAPI dependency: one DB session per request, always closed."""
+    """FastAPI dependency: one DB session per request. If the request fails for any
+    reason, nothing half-finished is kept: the session is rolled back, then closed."""
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@contextmanager
+def session_scope():
+    """A session for work outside a request (background tasks, start-up jobs):
+    commits on success, rolls back on any error, always closes."""
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

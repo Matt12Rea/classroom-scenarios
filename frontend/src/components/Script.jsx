@@ -34,7 +34,7 @@ export default function Script({ state, youLabel = "You", highlightId, tools, ch
   };
 
   state.messages.forEach((m, i) => {
-    if (pending && !(m.role === "system" && (m.speaker === "Feedback" || m.speaker === "Inference"))) sceneHead(`scene-${i}`);
+    if (pending && !(m.role === "system" && ["Feedback", "Inference", "Paused", "Resumed"].includes(m.speaker))) sceneHead(`scene-${i}`);
     const flagged = m.id === highlightId;
     const tool = tools?.(m);
     if (m.role === "system" && m.speaker === "Decision") {
@@ -51,6 +51,8 @@ export default function Script({ state, youLabel = "You", highlightId, tools, ch
       out.push(<p key={m.id} className="insight-line"><b>Why the scene moved on:</b> {m.content}</p>);
     } else if (m.role === "system" && m.speaker === "Feedback") {
       out.push(<p key={m.id} className="note-line"><span className="sr-only">Instructor's note: </span>{m.content}</p>);
+    } else if (m.role === "system" && (m.speaker === "Paused" || m.speaker === "Resumed")) {
+      out.push(<div key={m.id} className={`status-note ${m.speaker === "Paused" ? "paused" : "resumed"}`} role="note">{m.content}</div>);
     } else if (m.role === "system") {
       out.push(<div key={m.id} className="support-line" role="note">{m.content}</div>);
     } else {

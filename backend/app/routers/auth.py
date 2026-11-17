@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config
@@ -21,8 +22,33 @@ def user_out(u: User) -> dict:
 
 
 class LoginReq(BaseModel):
-    email: str
-    password: str
+    # Length limits keep an attacker from making the server hash megabytes of "password".
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=256)
+
+
+# The demo accounts, in the order the sign-in page offers them.
+DEMO_ACCOUNTS = [("admin@demo.school", "Administrator", "Reviews safety flags, resumes paused sessions, manages accounts"),
+                 ("teacher@demo.school", "Instructor", "Builds scenarios, assigns them, reads results"),
+                 ("student@demo.school", "Student", "Plays the assigned scenarios"),
+                 ("it@demo.school", "IT support", "Checks system status and the AI connection")]
+
+
+@router.get("/demo")
+def demo_accounts(db: Session = Depends(get_db)):
+    """Lets the sign-in page offer the demo accounts when (and only when) this is a
+    demo site: LOAD_DEMO_DATA is on, or it's a development copy with the demo school
+    loaded. The password is included only if it is the published default."""
+    if not (config.LOAD_DEMO_DATA or not config.IS_PROD):
+        return {"demo": False, "accounts": []}
+    emails = [e for e, _, _ in DEMO_ACCOUNTS]
+    present = set(db.scalars(select(User.email).where(User.email.in_(emails), User.active.is_(True))))
+    if "admin@demo.school" not in present:
+        return {"demo": False, "accounts": []}
+    default_pw = config.DEMO_PASSWORD == "demo-pass-1"
+    return {"demo": True, "password": config.DEMO_PASSWORD if default_pw else None,
+            "accounts": [{"email": e, "role": role, "about": about}
+                         for e, role, about in DEMO_ACCOUNTS if e in present]}
 
 
 @router.post("/login")
@@ -54,8 +80,8 @@ def refresh(user: User = Depends(current_user)):
 
 
 class PasswordReq(BaseModel):
-    current_password: str
-    new_password: str
+    current_password: str = Field(max_length=256)
+    new_password: str = Field(max_length=256)
 
 
 @router.post("/password")

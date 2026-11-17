@@ -34,7 +34,11 @@ function errorFrom(status, body) {
   return new ApiError(status, "Request failed.");
 }
 
-export async function api(path, { method = "GET", body, raw = false, retries } = {}) {
+// Longest we wait for the server. AI replies can take a while, so this is generous;
+// without it a dropped connection would leave a button spinning for ever.
+const TIMEOUT_MS = 90_000;
+
+export async function api(path, { method = "GET", body, raw = false, retries, timeout = TIMEOUT_MS } = {}) {
   const headers = {};
   const token = readToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -43,12 +47,17 @@ export async function api(path, { method = "GET", body, raw = false, retries } =
   let attempts = retries ?? (method === "GET" ? 2 : 0);
   for (;;) {
     let res;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeout);
     try {
-      res = await fetch(BASE + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    } catch {
+      res = await fetch(BASE + path, { method, headers, signal: ctl.signal, body: body === undefined ? undefined : JSON.stringify(body) });
+    } catch (e) {
+      clearTimeout(timer);
+      if (e?.name === "AbortError") throw new ApiError(0, "The server took too long to answer. Check your connection and try again.");
       if (attempts-- > 0) { await new Promise((r) => setTimeout(r, 700)); continue; }
       throw new ApiError(0, "Can't reach the server. Check your internet connection and try again.");
     }
+    clearTimeout(timer);
     if (res.status === 401 && token) { onUnauthorized(); }
     if (!res.ok) {
       if (res.status >= 502 && res.status !== 503 && attempts-- > 0) { await new Promise((r) => setTimeout(r, 700)); continue; }
@@ -57,12 +66,14 @@ export async function api(path, { method = "GET", body, raw = false, retries } =
       throw errorFrom(res.status, data);
     }
     if (raw) return res;
-    return res.status === 204 ? null : res.json();
+    if (res.status === 204) return null;
+    try { return await res.json(); }
+    catch { throw new ApiError(res.status, "The server sent a reply this page couldn't read. Reload and try again."); }
   }
 }
 
 export async function downloadFile(path, fallbackName) {
-  const res = await api(path, { raw: true });
+  const res = await api(path, { raw: true, timeout: 180_000 });
   const blob = await res.blob();
   const cd = res.headers.get("Content-Disposition") || "";
   const name = /filename="([^"]+)"/.exec(cd)?.[1] || fallbackName;
@@ -120,8 +131,14 @@ export function AuthProvider({ children }) {
 // index.html for any page address, so links can be bookmarked and shared.
 const ROUTE_EVENT = "aicss:navigate";
 
-export function navigate(path, { replace = false } = {}) {
+// A page with unsaved work (the scenario builder) sets a question to ask before leaving.
+let leaveGuard = null;
+export function setLeaveGuard(question) { leaveGuard = question || null; }
+
+export function navigate(path, { replace = false, force = false } = {}) {
   if (location.pathname + location.search === path) return;
+  if (leaveGuard && !force && !window.confirm(leaveGuard)) return;
+  leaveGuard = null;
   history[replace ? "replaceState" : "pushState"](null, "", path);
   window.dispatchEvent(new Event(ROUTE_EVENT));
 }
@@ -194,17 +211,51 @@ export function ToastProvider({ children }) {
 }
 
 // ------------------------------------------------------------ data hook --
+// Loads `path` and reloads when it changes. If the path changes again before the
+// first answer arrives (typing in a search box), the older answer is ignored, so a
+// slow early request can never overwrite a newer one. Data from the previous load
+// stays on screen while the next one is in flight.
 export function useApi(path, deps = []) {
-  const [state, setState] = useState({ data: null, error: null, loading: true });
+  const [state, setState] = useState({ data: null, error: null, loading: !!path });
+  const seq = useRef(0);
   const load = useCallback(() => {
     if (!path) return;
+    const mine = ++seq.current;
     setState((s) => ({ ...s, loading: true, error: null }));
-    api(path).then((data) => setState({ data, error: null, loading: false }))
-      .catch((error) => setState({ data: null, error, loading: false }));
+    api(path).then((data) => { if (mine === seq.current) setState({ data, error: null, loading: false }); })
+      .catch((error) => { if (mine === seq.current) setState((s) => ({ data: s.data, error, loading: false })); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, ...deps]);
-  useEffect(load, [load]);
-  return { ...state, reload: load, setData: (data) => setState((s) => ({ ...s, data })) };
+  useEffect(() => { load(); return () => { seq.current++; }; }, [load]);
+  const setData = useCallback((data) => setState((s) => ({ ...s, data })), []);
+  return { ...state, reload: load, setData };
+}
+
+/** The value, but only after it has stopped changing for `ms` (for search boxes). */
+export function useDebounced(value, ms = 300) {
+  const [v, setV] = useState(value);
+  useEffect(() => { const t = setTimeout(() => setV(value), ms); return () => clearTimeout(t); }, [value, ms]);
+  return v;
+}
+
+/** Run an async action once at a time: returns [run, busy]. Extra clicks while it is
+ *  running are ignored, so nothing is submitted twice. */
+export function useBusy() {
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const run = useCallback(async (fn) => {
+    if (lock.current) return undefined;
+    lock.current = true; setBusy(true);
+    try { return await fn(); } finally { lock.current = false; setBusy(false); }
+  }, []);
+  return [run, busy];
+}
+
+/** "Ana Torres", "Ana Torres and Luis Torres", "A, B and C". */
+export function nameList(names) {
+  const n = names.filter(Boolean);
+  if (n.length <= 1) return n[0] || "the character";
+  return `${n.slice(0, -1).join(", ")} and ${n.at(-1)}`;
 }
 
 export const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
@@ -221,3 +272,4 @@ export const CATEGORY_LABEL = {
   harassment: "Abusive language", sexual: "Sexual content", personal_info: "Personal info shared",
   ai_output: "AI reply problem", repeated: "Repeated misuse", other: "Other",
 };
+export const SEVERITY_LABEL = { high: "Serious", medium: "Medium", low: "Low" };
