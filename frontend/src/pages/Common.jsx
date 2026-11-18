@@ -1,6 +1,6 @@
 // Sign-in, password change, help, and the student's home page.
 import { useState } from "react";
-import { api, fmtDate, navigate, OUTCOME_LABEL, useApi, useAuth, useToast } from "../lib.jsx";
+import { api, fmtDate, navigate, OUTCOME_LABEL, useApi, useAuth, useBusy, useToast } from "../lib.jsx";
 import { Empty, ErrorBanner, Field, Loading, Logo, PageHead, Status } from "../ui.jsx";
 
 export function Login() {
@@ -9,10 +9,14 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
-  const submit = async (e) => {
-    e.preventDefault(); setBusy(true); setErr(null);
-    try { await login(email, password); } catch (x) { setErr(x); } finally { setBusy(false); }
+  // On a demo site the server lists the demo accounts, so nobody has to hunt for them.
+  const { data: demo } = useApi("/api/auth/demo");
+  const signIn = async (em, pw) => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try { await login(em, pw); } catch (x) { setErr(x); } finally { setBusy(false); }
   };
+  const submit = (e) => { e.preventDefault(); signIn(email, password); };
   return (
     <div className="login">
       <header className="masthead"><span className="wordmark"><Logo /><span>Classroom Scenarios</span></span></header>
@@ -29,10 +33,25 @@ export function Login() {
             <Field label="Password">{(id) => <input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
             <button className="btn primary block" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
             <p className="small muted">Forgot your password? Your instructor or an administrator can reset it.</p>
+            {demo?.demo && demo.accounts.length > 0 && (
+              <div className="demo-box">
+                <b>This is a demo site with sample data.</b>
+                <span className="small muted">{demo.password ? "Sign in as any role with one click:" : "Demo accounts (ask whoever set this up for the password):"}</span>
+                <ul>
+                  {demo.accounts.map((a) => (
+                    <li key={a.email}>
+                      {demo.password
+                        ? <button type="button" className="btn small" disabled={busy} onClick={() => signIn(a.email, demo.password)}>{a.role}</button>
+                        : <button type="button" className="btn small" onClick={() => setEmail(a.email)}>{a.role}</button>}
+                      <span className="small muted">{a.about}</span>
+                    </li>))}
+                </ul>
+              </div>
+            )}
           </form>
           <aside className="login-about">
             <Logo size={56} className="crest" />
-            <h2>AI Driven Classroom Scenarios.</h2>
+            <h2>Practise the conversations your discipline depends on.</h2>
             <p>Role-plays written by your instructors, where you put course material to work: advise a bank on interest-rate risk, defend a study to an ethics board, explain a genetic test result.</p>
           </aside>
         </div>
@@ -76,19 +95,23 @@ export function StudentHome() {
   const { user } = useAuth();
   const { data, error, loading, reload } = useApi("/api/student/assignments");
   const [err, setErr] = useState(null);
-  const open = async (a, restart = false) => {
+  const [run, busy] = useBusy();
+  const open = (a, restart = false) => {
     if (a.session_id && a.status === "in_progress" && !restart) return navigate(`/play/${a.session_id}`);
-    try {
-      const st = await api("/api/sessions", { method: "POST", body: { scenario_id: a.scenario_id, restart } });
-      navigate(`/play/${st.id}`);
-    } catch (x) { setErr(x); }
+    return run(async () => {
+      setErr(null);
+      try {
+        const st = await api("/api/sessions", { method: "POST", body: { scenario_id: a.scenario_id, restart } });
+        navigate(`/play/${st.id}`);
+      } catch (x) { setErr(x); }
+    });
   };
   const first = user.name.split(" ")[0];
   return (
     <div className="page">
       <PageHead title="My scenarios" sub={`Welcome, ${first}.`} />
       <ErrorBanner error={error || err} onRetry={error ? reload : null} />
-      {loading && <Loading />}
+      {loading && !data && <Loading />}
       {data && data.length === 0 && (
         <Empty title="Nothing assigned yet">Scenarios your instructors assign will appear here.</Empty>
       )}
@@ -103,14 +126,15 @@ export function StudentHome() {
               </div>
               <div className="assignment-side">
                 <div className="row end">
-                  {a.outcome_type ? <span className={`badge ${a.outcome_type}`}>{OUTCOME_LABEL[a.outcome_type]}</span> : <Status value={a.status} />}
+                  {a.paused ? <span className="badge warn plain">Paused for review</span>
+                    : a.outcome_type ? <span className={`badge ${a.outcome_type}`}>{OUTCOME_LABEL[a.outcome_type]}</span> : <Status value={a.status} />}
                 </div>
                 <div className="row end">
-                  {a.status === "in_progress" && <button className="btn primary" onClick={() => open(a)}>Continue</button>}
-                  {a.status === "not_started" && <button className="btn primary" onClick={() => open(a)}>Start scenario</button>}
+                  {a.status === "in_progress" && <button className="btn primary" onClick={() => open(a)}>{a.paused ? "Open" : "Continue"}</button>}
+                  {a.status === "not_started" && <button className="btn primary" disabled={busy} onClick={() => open(a)}>Start scenario</button>}
                   {(a.status === "completed" || a.status === "abandoned") && <>
                     {a.session_id && <a className="btn" href={`/play/${a.session_id}`}>See result</a>}
-                    <button className="btn primary" onClick={() => open(a, true)}>Try again</button>
+                    <button className="btn primary" disabled={busy} onClick={() => open(a, true)}>Try again</button>
                   </>}
                 </div>
               </div>
@@ -141,22 +165,26 @@ export function Help() {
       {(user.role === "teacher" || user.role === "admin") && <>
         <h2>Building a scenario</h2>
         <ol>
-          <li><b>Basics</b>: title, setting, objectives and message limits.</li>
+          <li><b>Overview</b>: title, setting, objectives and the message limit.</li>
           <li><b>Characters</b>: who the AI plays and how they behave.</li>
-          <li><b>Scenes</b>: the situations. Give each scene paths to other scenes, and describe what a student says or does to take each one. Or make the scene an ending.</li>
-          <li><b>Review &amp; publish</b>: check the map, preview, publish, then assign to a course.</li>
+          <li><b>Scenes and paths</b>: the situations. For each scene, say what's happening and tick who is in it (a scene can have several characters). Then either make it an ending, or give it paths: “if the student does this, then go to that scene”.</li>
+          <li><b>Review and publish</b>: read the list of every route from the first scene to each ending, preview, publish, then assign to a course.</li>
         </ol>
         <h2>How scenes move on</h2>
         <p>Students never see your paths. After each message, an AI judge checks whether the student's words match one of them. It can only choose paths you wrote.</p>
         <p>Each scene has a minimum and a maximum number of messages. At the maximum, if no path was clearly taken, the scene's fallback path is used. By default that's the path toward the worst ending, so not engaging never pays off.</p>
         <p>In Preview, a panel below the message box lists the scene's paths, and each scene change explains why it happened. Students see neither.</p>
         <h2>Results</h2>
-        <p>Results show who has started and finished, which paths and endings students reached, and each full conversation. Export downloads a CSV.</p>
+        <p>Results show who has started and finished, which paths and endings students reached, and each full conversation. Export downloads the results summary as CSV, or the conversations themselves as PDF or CSV. Any single conversation can be exported from its own page.</p>
       </>}
       {user.role === "admin" && <>
         <h2>Safety review</h2>
         <p>Flagged messages appear in Safety review, most serious first. Open one to see it in context, then dismiss it or act: hide the message, pause the session, or disable the account.</p>
-        <p>Messages are checked by keyword and, when Claude is connected, by the AI judge. After 3 flagged messages in one session (set with <code>AUTO_PAUSE_AFTER_FLAGS</code>), the session pauses and a “Repeated misuse” flag appears. Resume it from the conversation.</p>
+        <p>Messages are checked by keyword and, when Claude is connected, by the AI judge. After 3 flagged messages in one session (set with <code>AUTO_PAUSE_AFTER_FLAGS</code>), the session pauses and a “Repeated misuse” flag appears.</p>
+        <h2>Resuming a paused session</h2>
+        <p>A paused student can't continue until an administrator resumes the session. Paused sessions are listed on the site overview and under Conversations (tick “Paused only”). Resume from any of these: the Resume button on the overview, the Resume button on the flag or the conversation, or the “Resume the session” tick box when you record your review. The student's page updates by itself, and the flag count starts again from zero.</p>
+        <h2>Exporting conversations</h2>
+        <p>Open a conversation and choose Export for a PDF or CSV of it. On the Conversations page, Export downloads everything the current search and filters show. Every export is recorded in the audit log.</p>
         <h2>Accounts</h2>
         <p>Add accounts one at a time or import a list. New accounts get a temporary password.</p>
         <h2>AI connection</h2>

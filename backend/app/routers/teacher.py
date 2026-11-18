@@ -1,22 +1,22 @@
 """Teacher tools: scenario authoring (SRS 3.1), classes and assignments,
 analytics and reports (SRS 3.5)."""
-import csv
-import io
 from collections import Counter, defaultdict
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .. import exports
 from ..access import get_scenario_for_edit, teacher_can_see_student
 from ..database import get_db
 from ..models import (Assignment, Classroom, Decision, Enrollment, Flag, PlaySession, Scenario, User,
                       audit, now)
 from ..scenario_schema import DEFAULT_BOUNDARIES, EXAMPLE, normalize, validate
 from ..security import require
+from ..transcripts import conversation_record
 
 router = APIRouter(prefix="/api", tags=["teacher"])
 staff = require("teacher", "admin")
@@ -33,6 +33,9 @@ def scenario_out(db: Session, sc: Scenario, full: bool = False) -> dict:
            "max_turns": sc.max_turns, "owner_id": sc.owner_id, "owner_name": sc.owner.name if sc.owner else "",
            "updated_at": sc.updated_at.isoformat() if sc.updated_at else None,
            "scene_count": len(d["nodes"]), "sessions": played,
+           "character_count": len(d["characters"]),
+           "ending_count": sum(1 for n in d["nodes"].values() if n["ending"]),
+           "ready": not validate(sc.title, d)["errors"],
            "assignments": [{"class_id": c.id, "class_name": c.name,
                             "due_at": a.due_at.isoformat() if a.due_at else None} for a, c in assigns]}
     if full:
@@ -105,6 +108,17 @@ def update_scenario(scenario_id: int, req: ScenarioIn, user: User = Depends(staf
     return scenario_out(db, sc, full=True)
 
 
+@router.post("/scenarios/{scenario_id}/restore")
+def restore(scenario_id: int, user: User = Depends(staff), db: Session = Depends(get_db)):
+    """Bring an archived scenario back as a draft."""
+    sc = get_scenario_for_edit(db, user, scenario_id)
+    if sc.status == "archived":
+        sc.status = "draft"
+        audit(db, user, "scenario.restore", f"scenario:{sc.id}", title=sc.title)
+        db.commit()
+    return scenario_out(db, sc, full=True)
+
+
 class ValidateReq(BaseModel):
     title: str = ""
     definition: dict = Field(default_factory=dict)
@@ -149,7 +163,7 @@ def archive(scenario_id: int, user: User = Depends(staff), db: Session = Depends
 @router.post("/scenarios/{scenario_id}/duplicate")
 def duplicate(scenario_id: int, user: User = Depends(require("teacher", "admin")), db: Session = Depends(get_db)):
     src = get_scenario_for_edit(db, user, scenario_id)
-    sc = Scenario(owner_id=user.id, title=f"{src.title} (copy)", description=src.description,
+    sc = Scenario(owner_id=user.id, title=f"{src.title[:190]} (copy)", description=src.description,
                   definition=normalize(src.definition), max_turns=src.max_turns)
     db.add(sc)
     db.commit()
@@ -237,6 +251,8 @@ def create_class(req: ClassReq, user: User = Depends(staff), db: Session = Depen
         t = db.get(User, teacher_id)
         if not t or t.role != "teacher":
             raise HTTPException(422, "Choose an instructor account for this course.")
+    if not req.name.strip():
+        raise HTTPException(422, "Give the course a name.")
     cl = Classroom(name=req.name.strip(), teacher_id=teacher_id)
     db.add(cl)
     db.flush()
@@ -248,6 +264,8 @@ def create_class(req: ClassReq, user: User = Depends(staff), db: Session = Depen
 @router.patch("/classes/{class_id}")
 def update_class(class_id: int, req: ClassReq, user: User = Depends(staff), db: Session = Depends(get_db)):
     cl = _class_for_edit(db, user, class_id)
+    if not req.name.strip():
+        raise HTTPException(422, "Give the course a name.")
     cl.name = req.name.strip()
     if user.role == "admin" and req.teacher_id is not None:
         t = db.get(User, req.teacher_id)
@@ -269,18 +287,19 @@ def delete_class(class_id: int, user: User = Depends(staff), db: Session = Depen
 
 
 class EnrollReq(BaseModel):
-    emails: list[str]
+    emails: list[str] = Field(max_length=2000)
 
 
 @router.post("/classes/{class_id}/students")
 def enroll(class_id: int, req: EnrollReq, user: User = Depends(staff), db: Session = Depends(get_db)):
     """Add existing student accounts by email. Accounts are created by admins."""
     cl = _class_for_edit(db, user, class_id)
-    added, missing = [], []
+    added, missing, seen = [], [], set()
     for raw in req.emails:
         email = raw.strip().lower()
-        if not email:
+        if not email or email in seen:      # the same address pasted twice is added once
             continue
+        seen.add(email)
         s = db.scalar(select(User).where(User.email == email, User.role == "student"))
         if not s:
             missing.append(email)
@@ -386,25 +405,60 @@ def export_csv(scenario_id: int, class_id: int | None = None,
                date_from: datetime | None = Query(None, alias="from"),
                date_to: datetime | None = Query(None, alias="to"),
                user: User = Depends(staff), db: Session = Depends(get_db)):   # REQ-3.5.7
+    """Results summary: one row per attempt."""
     sc = get_scenario_for_edit(db, user, scenario_id)
     roster = _roster(db, sc, user, class_id)
     sessions = _filtered_sessions(db, sc.id, class_id, date_from, date_to, list(roster))
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(["student", "email", "course", "attempt", "status", "outcome", "outcome_type", "messages",
-                "decisions", "started", "completed"])
+    rows = []
     for s in sessions:
         u, cname = roster[s.student_id]
         path = " > ".join(x.choice for x in db.scalars(
             select(Decision).where(Decision.session_id == s.id).order_by(Decision.id)))
-        w.writerow([u.name, u.email, cname, s.attempt, s.status, s.outcome or "", s.outcome_type or "", s.turns,
-                    path, s.started_at.isoformat() if s.started_at else "",
-                    s.completed_at.isoformat() if s.completed_at else ""])
+        rows.append([u.name, u.email, cname, s.attempt, s.status, s.outcome or "", s.outcome_type or "", s.turns,
+                     path, s.started_at.isoformat() if s.started_at else "",
+                     s.completed_at.isoformat() if s.completed_at else ""])
     audit(db, user, "report.export", f"scenario:{sc.id}", rows=len(sessions))
     db.commit()
-    name = "".join(ch if ch.isalnum() else "_" for ch in sc.title)[:40] or "report"
-    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
-                             headers={"Content-Disposition": f'attachment; filename="{name}.csv"'})
+    name = exports.safe_filename(f"{sc.title} results", "csv")
+    return Response(exports.results_csv(rows), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+def _export_conversations(db: Session, user: User, scenario_id: int, fmt: str, class_id, date_from, date_to):
+    """Every logged conversation for one scenario (respecting the Results filters)."""
+    sc = get_scenario_for_edit(db, user, scenario_id)
+    roster = _roster(db, sc, user, class_id)
+    sessions = _filtered_sessions(db, sc.id, class_id, date_from, date_to, list(roster))
+    cap = exports.MAX_PDF_CONVERSATIONS if fmt == "pdf" else exports.MAX_CSV_CONVERSATIONS
+    if len(sessions) > cap:
+        raise HTTPException(413, f"That's {len(sessions)} conversations, which is too many for one "
+                                 f"{fmt.upper()} file (the limit is {cap}). Filter by course or date and try again.")
+    records = [conversation_record(db, s, course=roster[s.student_id][1]) for s in sessions]
+    if fmt == "pdf":
+        body = exports.conversations_pdf(records, title=f"Conversations: {sc.title}", generated_by=user.name)
+        media = "application/pdf"
+    else:
+        body, media = exports.conversations_csv(records), "text/csv; charset=utf-8"
+    audit(db, user, "conversation.export", f"scenario:{sc.id}", format=fmt, conversations=len(records))
+    db.commit()
+    name = exports.safe_filename(f"{sc.title} conversations", fmt)
+    return Response(body, media_type=media, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@router.get("/scenarios/{scenario_id}/conversations.csv")
+def export_conversations_csv(scenario_id: int, class_id: int | None = None,
+                             date_from: datetime | None = Query(None, alias="from"),
+                             date_to: datetime | None = Query(None, alias="to"),
+                             user: User = Depends(staff), db: Session = Depends(get_db)):
+    return _export_conversations(db, user, scenario_id, "csv", class_id, date_from, date_to)
+
+
+@router.get("/scenarios/{scenario_id}/conversations.pdf")
+def export_conversations_pdf(scenario_id: int, class_id: int | None = None,
+                             date_from: datetime | None = Query(None, alias="from"),
+                             date_to: datetime | None = Query(None, alias="to"),
+                             user: User = Depends(staff), db: Session = Depends(get_db)):
+    return _export_conversations(db, user, scenario_id, "pdf", class_id, date_from, date_to)
 
 
 @router.get("/teacher/overview")
@@ -438,10 +492,13 @@ def overview(user: User = Depends(staff), db: Session = Depends(get_db)):
 
 @router.get("/students/{student_id}/sessions")
 def student_history(student_id: int, user: User = Depends(staff), db: Session = Depends(get_db)):
+    """A student's attempts. Instructors see only attempts at their own scenarios."""
     if user.role == "teacher" and not teacher_can_see_student(db, user, student_id):
         raise HTTPException(404, "Student not found.")
     q = select(PlaySession, Scenario).join(Scenario, Scenario.id == PlaySession.scenario_id).where(
         PlaySession.student_id == student_id, PlaySession.is_preview.is_(False))
+    if user.role == "teacher":
+        q = q.where(Scenario.owner_id == user.id)
     return [{"session_id": s.id, "scenario": sc.title, "status": s.status, "outcome": s.outcome,
              "outcome_type": s.outcome_type, "turns": s.turns, "attempt": s.attempt,
              "updated_at": s.updated_at.isoformat()}

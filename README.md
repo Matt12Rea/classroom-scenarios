@@ -9,34 +9,56 @@ application makes the move.
 AICSG/
 ├── backend/            FastAPI + SQLAlchemy (SQLite in dev, PostgreSQL-ready)
 │   ├── app/
-│   │   ├── main.py             app setup, error handling, serves the built frontend
+│   │   ├── main.py             app setup, security headers, serves the built frontend
 │   │   ├── config.py           every setting, all overridable by environment variables
-│   │   ├── database.py         DB connection (change DATABASE_URL to switch databases)
+│   │   ├── database.py         DB connection; every request rolls back if it fails
+│   │   ├── errors.py           one place that turns any failure into a clear message
 │   │   ├── models.py           tables: users, classes, enrollments, scenarios, assignments,
 │   │   │                       sessions, messages, decisions, flags, audit_log
 │   │   ├── security.py         password hashing, login tokens, role checks, rate limits
 │   │   ├── access.py           who may see what (one place to audit)
+│   │   │
+│   │   │   -- the rules (plain functions: no database, no web, no AI; tested directly) --
 │   │   ├── scenario_schema.py  scenario format, validation (dead ends, unreachable scenes…)
+│   │   ├── dialogue.py         prompts, reading AI replies, when a scene moves on
 │   │   ├── moderation.py       safety screening of student input and AI output
+│   │   ├── exports.py          CSV and PDF files from conversations
+│   │   │
+│   │   │   -- the parts that touch the database or the AI --
+│   │   ├── engine.py           one student turn, start to finish
+│   │   ├── safety.py           flags; pausing and resuming a session
+│   │   ├── transcripts.py      reading a session back out (player, conversation views, exports)
 │   │   ├── ai.py               the only module that talks to Claude (+ demo/mock engine)
 │   │   ├── settings_store.py   AI key/model set from the dashboard (encrypted), AI health
-│   │   └── routers/            auth, play (student), teacher, admin, system (AI connection)
-│   ├── seed.py                 first admin account, or a demo university
-│   └── tests/test_api.py       end-to-end tests (no API key needed)
+│   │   └── routers/            auth, play (student), teacher, admin, system: thin, they check
+│   │                           who is asking and call the modules above
+│   ├── seed.py                 first admin account, or the demo school
+│   ├── demo_content.py         the demo scenarios and a written conversation for every path
+│   └── tests/                  test_logic.py + test_exports.py (rules, no server needed),
+│                               test_api.py (end to end, no API key needed)
 ├── frontend/           React (Vite). No UI libraries, no router dependency.
 │   ├── src/App.jsx             role-based navigation and routes
-│   ├── src/lib.jsx             API client, auth, router (normal URLs), toasts
+│   ├── src/lib.jsx             API client, auth, router (normal URLs), toasts, data hooks
+│   ├── src/ui.jsx              shared pieces: fields, dialogs, export menu, error boundary
+│   ├── src/graph.js            scenario routes and story order (plain functions)
 │   ├── src/styles.css          design tokens and components
 │   ├── src/pages/Play.jsx      the student player
-│   ├── src/pages/teacher/      scenario builder, results, classes
+│   ├── src/pages/teacher/      scenario builder, scenario manager, results, courses
 │   ├── src/pages/admin/        users, safety review, conversations, audit, AI connection
 │   └── dist/                   a prebuilt copy so you can run without Node
 ├── Dockerfile          builds the site and server into one image
 ├── docker-compose.yml  production on your own server: app + PostgreSQL + backups + HTTPS (Caddy)
 ├── render.yaml         one-click hosting on Render
 ├── DEPLOY.md           step-by-step guide to putting the site online
-└── docs/REQUIREMENTS_TRACE.md   every SRS requirement and where it's met
+├── CHANGES.md          what changed in version 2
+└── docs/               DEMO_GUIDE.md (who is who in the demo, and a walkthrough),
+                        REQUIREMENTS_TRACE.md (every SRS requirement and where it's met)
 ```
+
+**Where to make a change.** A new rule about scenes or prompts goes in `dialogue.py` or
+`scenario_schema.py` with a test in `tests/test_logic.py`. A new export format goes in `exports.py`.
+A new screen calls an endpoint in `routers/`, which should stay a few lines: check access, call a
+module, return. Version 2 changes no database tables, so it runs on a version 1 database as it is.
 
 **To put the site online, follow [DEPLOY.md](DEPLOY.md).** The sections below are for
 running it on your own computer while developing.
@@ -60,6 +82,7 @@ Open http://localhost:8000. The backend serves `frontend/dist`, so this alone gi
 Public Sans and Source Serif 4 fonts.)
 
 Demo accounts: `admin@demo.school`, `teacher@demo.school` (an instructor), `student@demo.school`, `it@demo.school`.
+On a demo site the sign-in page lists them with one-click buttons. **[docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md)** says who is in which state and gives a five-minute walkthrough.
 The demo includes three published, course-based scenarios (ECON 210: advising a community bank on interest-rate
 risk; PSYC 310: defending a deception study to the IRB; BIOL 340: explaining a cystic fibrosis carrier result)
 and a draft (HIST: the 1787 representation deadlock).
@@ -74,7 +97,7 @@ npm run dev        # http://localhost:5173, hot reload; /api is proxied to :8000
 npm run build      # refreshes frontend/dist for the backend to serve
 ```
 
-**Tests:** `cd backend && pytest -q`
+**Tests:** `cd backend && pytest -q` (54 tests). `pytest -q tests/test_logic.py tests/test_exports.py` runs the rule and export tests alone, with no web framework or database installed.
 
 ## Going to production
 
@@ -154,6 +177,7 @@ so administrators see what's wrong without reading server logs.
 * **LMS / LTI integration (UC-07)**: not started. `Assignment` and `PlaySession` already hold the course, assignment and completion data an LTI grade passback would need.
 * **Internationalisation (ES/FR)**: the UI strings are plain English in the components. Pull them into a dictionary when you add languages.
 * **Streaming replies**: responses arrive whole. Switching `ai.ClaudeEngine.reply` to `messages.stream` and the endpoint to SSE would make long replies feel faster.
-* **PDF export**: CSV only for now.
+* **Database migrations**: there is no migration tool yet, and version 2 deliberately changes no tables. The next change that adds a column should bring in Alembic first.
+* **Turn locking across servers**: a second message for the same session is refused while the first is being answered, per server process. With several processes the staleness check in `engine.take_turn` is the backstop.
 * Prompt caching is turned on, but the system prompt is shorter than Claude's minimum cacheable length, so it won't save anything until prompts grow.
 * The keyword patterns in `moderation.py` are a starting point. Add institution-specific ones with `BLOCKLIST_FILE` (one regex per line), and keep `MODERATION_AI_REVIEW` on in production.

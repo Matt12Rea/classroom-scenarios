@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AuthProvider, match, ROLE_LABEL, ToastProvider, useApi, useAuth, useRoute } from "./lib.jsx";
-import { Loading, Logo } from "./ui.jsx";
+import { ErrorBoundary, Icon, Loading, Logo } from "./ui.jsx";
 import { ChangePassword, Help, Login, StudentHome } from "./pages/Common.jsx";
 import Play from "./pages/Play.jsx";
 import Editor from "./pages/teacher/Editor.jsx";
@@ -11,15 +11,15 @@ import AIConnection from "./pages/admin/AIConnection.jsx";
 // Each role sees only its own navigation and routes (REQ-3.6.2).
 // Navigation is grouped so the same items always appear in the same place (NFR-5.4.2).
 const NAV = {
-  student: [[null, [["/", "My scenarios"]]]],
-  teacher: [[null, [["/", "Overview"], ["/scenarios", "Scenarios"], ["/classes", "Courses"]]]],
+  student: [[null, [["/", "My scenarios", "home"]]]],
+  teacher: [[null, [["/", "Overview", "home"], ["/scenarios", "Scenarios", "book"], ["/classes", "Courses", "people"]]]],
   admin: [
-    [null, [["/", "Overview"]]],
-    ["Oversight", [["/flags", "Safety review"], ["/interactions", "Conversations"]]],
-    ["Teaching", [["/scenarios", "Scenarios"], ["/classes", "Courses"]]],
-    ["Administration", [["/users", "Users and roles"], ["/ai", "AI connection"], ["/audit", "Audit log"]]],
+    [null, [["/", "Overview", "home"]]],
+    ["Oversight", [["/flags", "Safety review", "shield"], ["/interactions", "Conversations", "chat"]]],
+    ["Teaching", [["/scenarios", "Scenarios", "book"], ["/classes", "Courses", "people"]]],
+    ["Administration", [["/users", "Users and roles", "user"], ["/ai", "AI connection", "plug"], ["/audit", "Audit log", "list"]]],
   ],
-  it_support: [[null, [["/", "System status"], ["/ai", "AI connection"]]]],
+  it_support: [[null, [["/", "System status", "home"], ["/ai", "AI connection", "plug"]]]],
 };
 
 const ROUTES = {
@@ -46,7 +46,7 @@ function UserMenu({ user, logout }) {
     document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", esc); };
   }, [open]);
-  const initials = user.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const initials = (user.name || "?").split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   return (
     <div className="user-menu" ref={ref}>
       <button className="user-btn" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}>
@@ -126,9 +126,9 @@ function Shell() {
             {NAV[user.role].map(([group, items]) => (
               <div className="nav-group" key={group || "main"}>
                 {group && <div className="nav-label">{group}</div>}
-                {items.map(([to, label]) => (
+                {items.map(([to, label, icon]) => (
                   <a key={to} href={to} aria-current={current(to) ? "page" : undefined}>
-                    <span>{label}</span>
+                    <span className="nav-item"><Icon name={icon} />{label}</span>
                     {to === "/flags" && flagCount > 0 && <span className="count" aria-label={`${flagCount} open`}>{flagCount}</span>}
                   </a>
                 ))}
@@ -136,12 +136,12 @@ function Shell() {
             ))}
           </div>
         </nav>}
-        <main className="main" id="main" tabIndex={-1}>{page}</main>
+        <main className="main" id="main" tabIndex={-1}><ErrorBoundary resetKey={path}>{page}</ErrorBoundary></main>
       </div>
     </div>
   );
 }
 
 export default function App() {
-  return <ToastProvider><AuthProvider><Shell /></AuthProvider></ToastProvider>;
+  return <ErrorBoundary><ToastProvider><AuthProvider><Shell /></AuthProvider></ToastProvider></ErrorBoundary>;
 }

@@ -80,7 +80,7 @@ interface, AI connection management).
 | REQ-3.5.4 Student and class performance | Met | Results page |
 | REQ-3.5.5 Filter by student, class, scenario, date | Met | Results filters and per-student rows |
 | REQ-3.5.6 Restrict by permission | Met | |
-| REQ-3.5.7 Export CSV or PDF | Partial | CSV export; PDF via the browser's print (print stylesheet added in 1.0) |
+| REQ-3.5.7 Export CSV or PDF | Met | Results summary as CSV; logged conversations as CSV or PDF (one conversation, a whole scenario, or an administrator's filtered list). `exports.py`, audited as `conversation.export` |
 | REQ-3.5.8 Error if data unavailable | Met | Error banners with retry |
 
 ## 3.6 User and access management
@@ -121,7 +121,7 @@ interface, AI connection management).
 | NFR-5.1.4 80 concurrent users | Met | Multiple worker processes, PostgreSQL, shared rate limits (New in 1.0) |
 | NFR-5.1.5 Queries within 2 s | Met | Indexed foreign keys |
 | NFR-5.1.6 Notify when external service is slow | Met | |
-| NFR-5.2.1 Admin can report/disable AI content | Met | Hide message, pause AI per session |
+| NFR-5.2.1 Admin can report/disable AI content | Met | Hide message; pause a session and resume it (from the flag, the conversation, the overview or the Conversations list). `safety.py` |
 | NFR-5.2.2 Students can't reach admin functions | Met | |
 | NFR-5.2.3 Teacher review before release | Met | Draft and preview |
 | NFR-5.2.4 Teacher-defined AI boundaries | Met | |

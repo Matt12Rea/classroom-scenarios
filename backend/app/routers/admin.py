@@ -3,17 +3,18 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
-from .. import ai, settings_store
+from .. import ai, exports, safety, settings_store
 from ..database import get_db
 from ..models import (ROLES, AuditLog, Classroom, Enrollment, Flag, Message, PlaySession, Scenario, User,
                       audit, now)
 from ..security import hash_password, require, temp_password, validate_new_password
+from ..transcripts import conversation_record, session_state
 from .auth import user_out
-from .play import session_state
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 admin = require("admin")
@@ -44,7 +45,7 @@ class UserCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: str = Field(min_length=3, max_length=254)
     role: str = "student"
-    password: str | None = None
+    password: str | None = Field(default=None, max_length=256)
 
 
 def _create_user(db, actor, req: UserCreate) -> tuple[User, str]:
@@ -53,6 +54,8 @@ def _create_user(db, actor, req: UserCreate) -> tuple[User, str]:
         raise HTTPException(422, f"“{req.email}” isn't a valid email address.")
     if req.role not in ROLES:
         raise HTTPException(422, f"Role must be one of: {', '.join(ROLES)}.")
+    if not req.name.strip():
+        raise HTTPException(422, "Every account needs a name.")
     if db.scalar(select(User.id).where(User.email == email)):
         raise HTTPException(409, f"An account already exists for {email}.")
     pw = req.password or temp_password()
@@ -74,7 +77,7 @@ def create_user(req: UserCreate, user: User = Depends(admin), db: Session = Depe
 
 
 class BulkCreate(BaseModel):
-    users: list[UserCreate]
+    users: list[UserCreate] = Field(max_length=2000)
     class_id: int | None = None
 
 
@@ -82,6 +85,8 @@ class BulkCreate(BaseModel):
 def import_users(req: BulkCreate, user: User = Depends(admin), db: Session = Depends(get_db)):
     """Create many accounts at once (e.g. pasted from a roster). Each row succeeds or
     reports its own error; nothing is half-created."""
+    if req.class_id and not db.get(Classroom, req.class_id):
+        raise HTTPException(404, "That course no longer exists. Choose another, or import without a course.")
     created, errors = [], []
     for i, row in enumerate(req.users):
         try:
@@ -97,7 +102,7 @@ def import_users(req: BulkCreate, user: User = Depends(admin), db: Session = Dep
 
 
 class UserPatch(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, max_length=120)
     role: str | None = None
     active: bool | None = None
 
@@ -135,7 +140,7 @@ def update_user(user_id: int, req: UserPatch, user: User = Depends(admin), db: S
 
 
 class BulkPatch(UserPatch):
-    ids: list[int]
+    ids: list[int] = Field(max_length=5000)
 
 
 @router.post("/users/bulk")
@@ -224,7 +229,8 @@ def flag_out(f: Flag, db: Session) -> dict:
             "reviewer": reviewer.name if reviewer else None,
             "student": {"id": f.student.id, "name": f.student.name, "email": f.student.email,
                         "active": f.student.active} if f.student else None,
-            "scenario": sc_title, "ai_paused": s.ai_paused if s else False,
+            "scenario": sc_title, "ai_paused": bool(s.ai_paused) if s else False,
+            "session_status": s.status if s else None,
             "created_at": f.created_at.isoformat(),
             "reviewed_at": f.reviewed_at.isoformat() if f.reviewed_at else None}
 
@@ -262,11 +268,17 @@ def get_flag(flag_id: int, user: User = Depends(admin), db: Session = Depends(ge
 
 
 class ReviewReq(BaseModel):
-    status: str                         # dismissed | actioned
-    note: str = ""
+    status: str                         # dismissed | actioned | open
+    note: str = Field(default="", max_length=2000)
     hide_message: bool = False          # remove the message from the transcript
     pause_ai: bool = False              # stop further AI conversation in that session
+    resume_session: bool = False        # let a paused session continue
     disable_student: bool = False       # disable the student's account
+
+
+def _require_in_progress(s: PlaySession):
+    if s.status != "in_progress":
+        raise HTTPException(409, "This attempt has already ended, so there is nothing to pause or resume.")
 
 
 @router.post("/flags/{flag_id}/review")
@@ -276,21 +288,27 @@ def review_flag(flag_id: int, req: ReviewReq, user: User = Depends(admin), db: S
         raise HTTPException(404, "Flag not found.")
     if req.status not in ("dismissed", "actioned", "open"):
         raise HTTPException(422, "Status must be dismissed, actioned or open.")
+    if req.pause_ai and req.resume_session:
+        raise HTTPException(422, "Choose either pause or resume, not both.")
     f.status, f.review_note, f.reviewer_id, f.reviewed_at = req.status, req.note, user.id, now()
     actions = []
     if req.hide_message and f.message_id:
         m = db.get(Message, f.message_id)
         if m:
             m.hidden = True
-            # Also hide the AI reply that answered it.
-            nxt = db.scalar(select(Message).where(Message.session_id == m.session_id, Message.id > m.id,
-                                                  Message.role == "assistant").order_by(Message.id).limit(1))
-            if nxt:
-                nxt.hidden = True
+            # Also hide the AI lines that answered it (everything up to the student's next message).
+            for nxt in db.scalars(select(Message).where(Message.session_id == m.session_id, Message.id > m.id)
+                                  .order_by(Message.id)):
+                if nxt.role == "user":
+                    break
+                if nxt.role == "assistant":
+                    nxt.hidden = True
             actions.append("hid message")
-    if req.pause_ai and f.session:
-        f.session.ai_paused = True
-        actions.append("paused AI")
+    s = f.session
+    if req.pause_ai and s and s.status == "in_progress" and safety.pause(db, s, user):
+        actions.append("paused session")
+    if req.resume_session and s and safety.resume(db, s, user):
+        actions.append("resumed session")
     if req.disable_student and f.student and f.student.role == "student":
         f.student.active = False
         f.student.token_version += 1
@@ -306,16 +324,18 @@ class PauseReq(BaseModel):
 
 @router.post("/sessions/{session_id}/pause")
 def pause_session(session_id: int, req: PauseReq, user: User = Depends(admin), db: Session = Depends(get_db)):
+    """Pause a session, or resume a paused one so the student can continue.
+    Resuming also restarts the flag count (see safety.py)."""
     s = db.get(PlaySession, session_id)
     if not s:
         raise HTTPException(404, "Session not found.")
-    if s.ai_paused and not req.paused and s.status == "in_progress":
-        db.add(Message(session_id=s.id, role="system", node=s.node, in_context=False, speaker="Resumed",
-                       content="An administrator resumed this session. You can continue."))
-    s.ai_paused = req.paused
-    audit(db, user, "session.pause" if req.paused else "session.resume", f"session:{s.id}")
+    if req.paused:
+        _require_in_progress(s)
+        changed = safety.pause(db, s, user)
+    else:
+        changed = safety.resume(db, s, user)
     db.commit()
-    return {"ok": True, "ai_paused": s.ai_paused}
+    return {"ok": True, "ai_paused": s.ai_paused, "changed": changed, "status": s.status}
 
 
 class HideReq(BaseModel):
@@ -334,9 +354,10 @@ def hide_message(message_id: int, req: HideReq, user: User = Depends(admin), db:
 
 
 # ============================================================= interactions ==
-@router.get("/sessions")
-def list_sessions(q: str = "", scenario_id: int | None = None, flagged: bool = False, status: str = "",
-                  user: User = Depends(admin), db: Session = Depends(get_db)):
+def _session_rows(db: Session, q: str, scenario_id: int | None, flagged: bool, status: str, paused: bool,
+                  limit: int):
+    """Sessions matching the Conversations page's filters, newest first.
+    Each row: (session, student, scenario, flag count, open flag count)."""
     flag_counts = select(Flag.session_id, func.count(Flag.id).label("n"),
                          func.sum(case((Flag.status == "open", 1), else_=0)).label("open")
                          ).group_by(Flag.session_id).subquery()
@@ -345,28 +366,68 @@ def list_sessions(q: str = "", scenario_id: int | None = None, flagged: bool = F
              .join(Scenario, Scenario.id == PlaySession.scenario_id)
              .outerjoin(flag_counts, flag_counts.c.session_id == PlaySession.id)
              .where(PlaySession.is_preview.is_(False)))
-    if q:
-        like = f"%{q.lower()}%"
+    if q.strip():
+        like = f"%{q.strip().lower()}%"
         query = query.where(or_(func.lower(User.name).like(like), func.lower(User.email).like(like),
                                 func.lower(Scenario.title).like(like)))
     if scenario_id:
         query = query.where(PlaySession.scenario_id == scenario_id)
     if flagged:
         query = query.where(flag_counts.c.n > 0)
+    if paused:
+        query = query.where(PlaySession.ai_paused.is_(True), PlaySession.status == "in_progress")
     if status:
         query = query.where(PlaySession.status == status)
-    rows = db.execute(query.order_by(PlaySession.updated_at.desc()).limit(300)).all()
+    return db.execute(query.order_by(PlaySession.updated_at.desc()).limit(limit)).all()
+
+
+@router.get("/sessions")
+def list_sessions(q: str = "", scenario_id: int | None = None, flagged: bool = False, status: str = "",
+                  paused: bool = False, user: User = Depends(admin), db: Session = Depends(get_db)):
+    rows = _session_rows(db, q, scenario_id, flagged, status, paused, 300)
     return [{"session_id": s.id, "student": u.name, "student_email": u.email, "scenario": sc.title,
              "status": s.status, "outcome": s.outcome, "outcome_type": s.outcome_type, "turns": s.turns,
-             "ai_paused": s.ai_paused, "flags": n or 0, "open_flags": int(o or 0),
-             "updated_at": s.updated_at.isoformat()} for s, u, sc, n, o in rows]
+             "ai_paused": bool(s.ai_paused and s.status == "in_progress"), "flags": n or 0,
+             "open_flags": int(o or 0), "updated_at": s.updated_at.isoformat()} for s, u, sc, n, o in rows]
+
+
+def _export_sessions(db: Session, user: User, fmt: str, q: str, scenario_id: int | None, flagged: bool,
+                     status: str, paused: bool) -> Response:
+    cap = exports.MAX_PDF_CONVERSATIONS if fmt == "pdf" else exports.MAX_CSV_CONVERSATIONS
+    rows = _session_rows(db, q, scenario_id, flagged, status, paused, cap + 1)
+    if len(rows) > cap:
+        raise HTTPException(413, f"That's more than {cap} conversations, which is too many for one "
+                                 f"{fmt.upper()} file. Narrow the search (or export CSV) and try again.")
+    records = [conversation_record(db, s) for s, *_ in rows]
+    if fmt == "pdf":
+        body, media = exports.conversations_pdf(records, title="Conversations", generated_by=user.name), "application/pdf"
+    else:
+        body, media = exports.conversations_csv(records), "text/csv; charset=utf-8"
+    audit(db, user, "conversation.export", "sessions", format=fmt, conversations=len(records))
+    db.commit()
+    name = exports.safe_filename("conversations", fmt)
+    return Response(body, media_type=media, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@router.get("/sessions/export.csv")
+def export_sessions_csv(q: str = "", scenario_id: int | None = None, flagged: bool = False, status: str = "",
+                        paused: bool = False, user: User = Depends(admin), db: Session = Depends(get_db)):
+    """Every line of every conversation matching the filters, as a spreadsheet."""
+    return _export_sessions(db, user, "csv", q, scenario_id, flagged, status, paused)
+
+
+@router.get("/sessions/export.pdf")
+def export_sessions_pdf(q: str = "", scenario_id: int | None = None, flagged: bool = False, status: str = "",
+                        paused: bool = False, user: User = Depends(admin), db: Session = Depends(get_db)):
+    """The conversations matching the filters as one printable document."""
+    return _export_sessions(db, user, "pdf", q, scenario_id, flagged, status, paused)
 
 
 # ==================================================================== audit ==
 @router.get("/audit")
 def audit_log(action: str = "", limit: int = 200, user: User = Depends(require("admin", "it_support")),
               db: Session = Depends(get_db)):
-    q = select(AuditLog).order_by(AuditLog.id.desc()).limit(min(limit, 1000))
+    q = select(AuditLog).order_by(AuditLog.id.desc()).limit(max(1, min(limit, 1000)))
     if action:
         q = q.where(AuditLog.action.like(f"{action}%"))
     return [{"id": a.id, "action": a.action, "target": a.target, "detail": a.detail,
@@ -378,9 +439,12 @@ def audit_log(action: str = "", limit: int = 200, user: User = Depends(require("
 def stats(user: User = Depends(require("admin", "it_support")), db: Session = Depends(get_db)):
     roles = dict(db.execute(select(User.role, func.count(User.id)).group_by(User.role)).all())
     day = datetime.now(timezone.utc) - timedelta(days=1)
+    # One AI call can produce several character lines; timing and usage are stored on the
+    # first, so counting rows that have a latency counts calls, not lines.
     msgs = db.execute(select(func.count(Message.id), func.avg(Message.latency_ms),
                              func.sum(Message.input_tokens), func.sum(Message.output_tokens))
-                      .where(Message.role == "assistant", Message.created_at >= day)).one()
+                      .where(Message.role == "assistant", Message.latency_ms.is_not(None),
+                             Message.created_at >= day)).one()
     open_flags = dict(db.execute(select(Flag.severity, func.count(Flag.id))
                                  .outerjoin(PlaySession, PlaySession.id == Flag.session_id)
                                  .where(Flag.status == "open",
@@ -393,6 +457,9 @@ def stats(user: User = Depends(require("admin", "it_support")), db: Session = De
         "scenarios": db.scalar(select(func.count(Scenario.id))) or 0,
         "sessions_active": db.scalar(select(func.count(PlaySession.id)).where(
             PlaySession.status == "in_progress", PlaySession.is_preview.is_(False))) or 0,
+        "sessions_paused": db.scalar(select(func.count(PlaySession.id)).where(
+            PlaySession.status == "in_progress", PlaySession.ai_paused.is_(True),
+            PlaySession.is_preview.is_(False))) or 0,
         "open_flags": open_flags,
         "ai_last_24h": {"replies": msgs[0] or 0, "avg_latency_ms": round(msgs[1]) if msgs[1] else None,
                         "input_tokens": msgs[2] or 0, "output_tokens": msgs[3] or 0},

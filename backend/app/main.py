@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select, text
 
-from . import config
+from . import config, errors
 from .database import SessionLocal, init_db
 from .routers import admin, auth, play, system, teacher
 
@@ -22,7 +22,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("aicss")
 
-app = FastAPI(title="AI Classroom Scenario System", version="1.0.0",
+app = FastAPI(title="AI Classroom Scenario System", version="2.0.0",
               # The interactive API docs are handy in development but needn't be public.
               docs_url=None if config.IS_PROD else "/api/docs", redoc_url=None,
               openapi_url=None if config.IS_PROD else "/api/openapi.json")
@@ -133,12 +133,7 @@ bootstrap_admin()
 load_demo_data()
 
 
-@app.exception_handler(Exception)
-async def unhandled(request: Request, exc: Exception):
-    # NFR-5.4.11: log enough to diagnose, but never request bodies (student text).
-    log.exception("Unhandled error on %s %s", request.method, request.url.path)
-    return JSONResponse({"detail": "Something went wrong on the server. Your saved work is safe. "
-                                   "Try again, and contact support if it keeps happening."}, status_code=500)
+errors.register(app)
 
 
 @app.get("/api/health")

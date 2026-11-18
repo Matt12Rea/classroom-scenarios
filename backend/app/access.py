@@ -39,6 +39,17 @@ def teacher_can_see_student(db: Session, teacher: User, student_id: int) -> bool
     ) is not None
 
 
+def teacher_assigned_scenario_to(db: Session, teacher: User, scenario_id: int, student_id: int) -> bool:
+    """True if the scenario is assigned to one of this instructor's courses and the
+    student is enrolled in that course."""
+    return db.scalar(
+        select(Assignment.id).join(Classroom, Classroom.id == Assignment.class_id)
+        .join(Enrollment, Enrollment.class_id == Classroom.id)
+        .where(Assignment.scenario_id == scenario_id, Classroom.teacher_id == teacher.id,
+               Enrollment.student_id == student_id).limit(1)
+    ) is not None
+
+
 def can_view_session(db: Session, user: User, s: PlaySession) -> bool:
     if user.role == "admin":
         return True
@@ -48,7 +59,9 @@ def can_view_session(db: Session, user: User, s: PlaySession) -> bool:
         if s.student_id == user.id:            # their own preview runs
             return True
         sc = db.get(Scenario, s.scenario_id)
-        return bool(sc and sc.owner_id == user.id) or teacher_can_see_student(db, user, s.student_id)
+        # Their own scenario, or one assigned in a course they teach. Teaching a student in
+        # one course doesn't open that student's work for other instructors' courses.
+        return bool(sc and sc.owner_id == user.id) or teacher_assigned_scenario_to(db, user, s.scenario_id, s.student_id)
     return False   # it_support: no access to student conversations (privacy)
 
 

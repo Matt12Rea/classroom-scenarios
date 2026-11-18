@@ -1,6 +1,6 @@
 """Scenario definition format, normalisation and validation.
 
-Shape produced by the teacher's scenario builder:
+Shape produced by the scenario builder:
 
 {
   "setting": "A community bank weighing 30-year fixed-rate mortgages.",
@@ -12,15 +12,20 @@ Shape produced by the teacher's scenario builder:
   "start": "briefing",
   "nodes": {
     "briefing": {"title": "The question", "prompt": "Carol asks whether to write more fixed-rate loans.",
-                 "character": "carol", "min_turns": 2, "wrap_after": 4,
+                 "characters": ["carol"], "character": "carol", "min_turns": 2, "wrap_after": 4,
+                 "fallback": "",
                  "choices": [{"label": "Explained the interest-rate risk",
                               "signal": "The student explains that rising deposit costs squeeze fixed loan income.",
                               "next": "sound", "feedback": ""}],
                  "ending": null},
-    "sound": {"title": "Sound advice", "prompt": "...", "character": "carol", "choices": [],
+    "sound": {"title": "Sound advice", "prompt": "...", "characters": ["carol"], "choices": [],
               "ending": {"label": "Sound recommendation", "type": "success", "feedback": "You found the risk."}}
   }
 }
+
+A scene ("node") can have several characters present: "characters" lists their ids
+in speaking order. "character" is always the first of them; it is kept so that
+older code and sessions started before multi-character scenes keep working.
 
 Students never see the choices. They are "paths": after each message the
 application asks a judge model whether the student's own words show they have
@@ -31,38 +36,60 @@ taken only if the student has actually done what it describes; otherwise the
 scene's "fallback" path is taken: the path with that label, or, if blank, the
 path whose branch leads to the worst ending (see fallback_choice).
 
-The original engine's format (single "character", choices as a dict, ending as a
-string) is still accepted and converted by normalize(). Choices without a
-"signal" are matched on their label alone.
+Older formats (single "character", choices as a dict, ending as a string) are
+still accepted and converted by normalize(). Choices without a "signal" are
+matched on their label alone.
+
+This module has no database or web imports, so it can be tested on its own.
 """
 import re
 from collections import deque
 
 ENDING_TYPES = ("success", "partial", "fail")
 DEFAULT_WRAP_AFTER = 8
+MAX_SCENE_CAST = 4          # characters that can be present in one scene
+MAX_SCENES = 80
+MAX_PATHS_PER_SCENE = 8
 DEFAULT_BOUNDARIES = [
     "Stay in character and on the topic of the scenario",
     "No profanity, sexual content, or graphic violence",
     "Never give real-world instructions that could cause harm",
 ]
+NARRATOR = {"id": "narrator", "name": "Narrator", "role": "narrator", "traits": ""}
 
 
 def slug(text: str, taken: set) -> str:
-    base = re.sub(r"[^a-z0-9]+", "_", (text or "item").lower()).strip("_")[:40] or "item"
+    base = re.sub(r"[^a-z0-9]+", "_", str(text or "item").lower()).strip("_")[:40] or "item"
     s, i = base, 2
     while s in taken:
         s, i = f"{base}_{i}", i + 1
     return s
 
 
+def _strings(value) -> list[str]:
+    """A list of non-empty strings from whatever was sent (a list, one string, or nothing)."""
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(v) for v in value if v is not None and str(v).strip()]
+
+
+def _int(value, default: int, lo: int, hi: int) -> int:
+    try:
+        return max(lo, min(hi, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
 def normalize(d: dict) -> dict:
     """Return a clean copy in the current format. Never raises on bad input;
     problems are reported by validate()."""
-    d = dict(d or {})
+    d = dict(d) if isinstance(d, dict) else {}
     out = {
         "setting": str(d.get("setting") or ""),
-        "objectives": [str(o) for o in (d.get("objectives") or []) if str(o).strip()],
-        "boundaries": [str(b) for b in (d.get("boundaries") or []) if str(b).strip()],
+        "objectives": _strings(d.get("objectives")),
+        "boundaries": _strings(d.get("boundaries")),
         "feedback_guidance": str(d.get("feedback_guidance") or ""),
         "start": str(d.get("start") or ""),
         "characters": [],
@@ -72,53 +99,78 @@ def normalize(d: dict) -> dict:
     if chars is None and isinstance(d.get("character"), dict):   # legacy single character
         chars = [{"id": "main", **d["character"]}]
     taken: set = set()
-    for c in chars or []:
+    for c in chars if isinstance(chars, list) else []:
         if not isinstance(c, dict):
             continue
         cid = str(c.get("id") or "") or slug(c.get("name", ""), taken)
         taken.add(cid)
-        out["characters"].append({"id": cid, "name": str(c.get("name") or ""),
-                                  "role": str(c.get("role") or ""),
+        out["characters"].append({"id": cid, "name": str(c.get("name") or "").strip()[:120],
+                                  "role": str(c.get("role") or "").strip(),
                                   "traits": str(c.get("traits") or "")})
     default_char = out["characters"][0]["id"] if out["characters"] else ""
 
-    for nid, n in (d.get("nodes") or {}).items():
+    nodes = d.get("nodes")
+    for nid, n in list(nodes.items())[:MAX_SCENES] if isinstance(nodes, dict) else []:
         if not isinstance(n, dict):
             continue
         choices = n.get("choices") or []
         if isinstance(choices, dict):                            # legacy {"label": "next"}
             choices = [{"label": k, "next": v} for k, v in choices.items()]
+        if not isinstance(choices, list):
+            choices = []
         ending = n.get("ending")
         if isinstance(ending, str):                              # legacy "Good outcome"
             ending = {"label": ending, "type": "partial", "feedback": ""}
         if isinstance(ending, dict):
-            ending = {"label": str(ending.get("label") or ""),
+            ending = {"label": str(ending.get("label") or "").strip()[:200],
                       "type": ending.get("type") if ending.get("type") in ENDING_TYPES else "partial",
                       "feedback": str(ending.get("feedback") or "")}
         else:
             ending = None
-        try:
-            min_turns = max(0, min(20, int(n.get("min_turns") or 0)))
-        except (TypeError, ValueError):
-            min_turns = 0
-        try:
-            wrap_after = max(0, min(50, int(n.get("wrap_after", DEFAULT_WRAP_AFTER))))
-        except (TypeError, ValueError):
-            wrap_after = DEFAULT_WRAP_AFTER
+
+        # Who is present: the new "characters" list, or the older single "character".
+        raw_cast = n.get("characters")
+        if isinstance(raw_cast, str):
+            raw_cast = [raw_cast]
+        if not isinstance(raw_cast, list) or not raw_cast:
+            raw_cast = [n.get("character")] if n.get("character") else []
+        cast: list[str] = []
+        for c in raw_cast:
+            c = str(c or "")
+            if c and c not in cast:
+                cast.append(c)
+        cast = cast[:MAX_SCENE_CAST]
+        if not cast and default_char:
+            cast = [default_char]
+
         out["nodes"][str(nid)] = {
-            "title": str(n.get("title") or nid),
+            "title": str(n.get("title") or nid).strip()[:200],
             "prompt": str(n.get("prompt") or ""),
-            "character": str(n.get("character") or default_char),
-            "min_turns": min_turns,
-            "wrap_after": wrap_after,
-            "fallback": "" if ending else str(n.get("fallback") or ""),
+            "characters": cast,
+            "character": cast[0] if cast else "",
+            "min_turns": _int(n.get("min_turns") or 0, 0, 0, 20),
+            "wrap_after": _int(n.get("wrap_after", DEFAULT_WRAP_AFTER), DEFAULT_WRAP_AFTER, 0, 50),
+            "fallback": "" if ending else str(n.get("fallback") or "").strip(),
             "choices": [] if ending else [
-                {"label": str(c.get("label") or ""), "signal": str(c.get("signal") or ""),
+                {"label": str(c.get("label") or "").strip()[:200], "signal": str(c.get("signal") or ""),
                  "next": str(c.get("next") or ""), "feedback": str(c.get("feedback") or "")}
-                for c in choices if isinstance(c, dict)],
+                for c in choices[:MAX_PATHS_PER_SCENE] if isinstance(c, dict)],
             "ending": ending,
         }
     return out
+
+
+def scene_cast(d: dict, node_id: str) -> list[dict]:
+    """The characters present in a scene, in speaking order. Always at least one, so
+    callers never have to handle an empty scene. Works on old snapshots that only have
+    a single "character" per scene."""
+    node = (d.get("nodes") or {}).get(node_id) or {}
+    by_id = {c["id"]: c for c in d.get("characters") or []}
+    ids = node.get("characters") or ([node["character"]] if node.get("character") else [])
+    cast = [by_id[i] for i in ids if i in by_id]
+    if cast:
+        return cast
+    return list((d.get("characters") or [])[:1]) or [dict(NARRATOR)]
 
 
 OUTCOME_RANK = {"fail": 0, "partial": 1, "success": 2}
@@ -158,7 +210,8 @@ def fallback_choice(d: dict, node_id: str) -> dict | None:
 
 def validate(title: str, d: dict) -> dict:
     """REQ-3.1.6 / 3.1.8 / 3.3.7. Returns {"errors": [...], "warnings": [...]},
-    each item {"field": "...", "message": "..."} so the UI can point at the field."""
+    each item {"field": "...", "message": "..."} so the UI can point at the field.
+    Expects a definition that has been through normalize()."""
     errors, warnings = [], []
 
     def err(field, msg):
@@ -167,7 +220,7 @@ def validate(title: str, d: dict) -> dict:
     def warn(field, msg):
         warnings.append({"field": field, "message": msg})
 
-    if not title.strip():
+    if not str(title or "").strip():
         err("title", "Give the scenario a title.")
     if not d["setting"].strip():
         err("setting", "Describe the setting so students know where they are.")
@@ -175,10 +228,14 @@ def validate(title: str, d: dict) -> dict:
         err("objectives", "Add at least one learning objective.")
     if not d["characters"]:
         err("characters", "Add at least one AI character.")
-    char_ids = set()
+    char_ids, names = set(), set()
     for i, c in enumerate(d["characters"]):
         if not c["name"].strip():
             err(f"characters.{i}.name", f"Character {i + 1} needs a name.")
+        elif c["name"].strip().lower() in names:
+            err(f"characters.{i}.name", f"Two characters are called “{c['name']}”. Give each a different name "
+                                        "so students can tell who is speaking.")
+        names.add(c["name"].strip().lower())
         if not c["role"].strip():
             err(f"characters.{i}.role", f"Say who {c['name'] or f'character {i + 1}'} is (their role).")
         if c["id"] in char_ids:
@@ -192,19 +249,26 @@ def validate(title: str, d: dict) -> dict:
     if d["start"] not in nodes:
         err("start", "Choose which scene the scenario starts with.")
 
+    in_a_scene: set = set()
     for nid, n in nodes.items():
         f = f"nodes.{nid}"
         name = f"Scene “{n['title']}”"
+        if len(nid) > 64:
+            err(f, f"{name} has an internal id that is too long. Delete the scene and add it again.")
+        cast = n.get("characters") or ([n["character"]] if n.get("character") else [])
+        in_a_scene.update(cast)
         if not n["prompt"].strip():
-            err(f"{f}.prompt", f"{name} needs a situation description.")
-        if n["character"] and n["character"] not in char_ids:
-            err(f"{f}.character", f"{name} uses a character that no longer exists.")
+            err(f"{f}.prompt", f"{name} needs a description of what's happening.")
+        if d["characters"] and not cast:
+            err(f"{f}.characters", f"{name} has no one in it. Choose at least one character.")
+        elif any(c not in char_ids for c in cast):
+            err(f"{f}.characters", f"{name} includes a character that no longer exists. Choose who is in the scene.")
         if n["ending"]:
             if not n["ending"]["label"].strip():
                 err(f"{f}.ending.label", f"{name} is an ending. Name the outcome (e.g. “Resolved”).")
             continue
         if not n["choices"]:
-            err(f"{f}.choices", f"{name} is a dead end. Add a path or mark it as an ending.")
+            err(f"{f}.choices", f"{name} doesn't lead anywhere. Add a path to another scene, or make it an ending.")
         labels = set()
         for j, c in enumerate(n["choices"]):
             if not c["label"].strip():
@@ -221,7 +285,11 @@ def validate(title: str, d: dict) -> dict:
             err(f"{f}.fallback", f"{name}: the path to take when nothing is clear no longer exists. Pick another.")
         if n["wrap_after"] and n["wrap_after"] < max(1, n["min_turns"]):
             err(f"{f}.wrap_after", f"{name} wraps up before students reach the minimum number of messages. "
-                                   "Raise the wrap-up limit or lower the minimum.")
+                                   "Raise the maximum or lower the minimum.")
+
+    for i, c in enumerate(d["characters"]):
+        if c["id"] not in in_a_scene and c["name"].strip():
+            warn(f"characters.{i}", f"{c['name']} isn't in any scene yet.")
 
     # Reachability: every scene should be reachable, and an ending reachable from start.
     if d["start"] in nodes:
