@@ -39,7 +39,8 @@ The whole process has four parts, and all the hosting is free:
 
 ### What you need before you start
 
-* The project folder. Unzip `aicss-website-v1.0.zip`; you'll get a folder called `aicss`.
+* The project folder. Unzip `classroom-scenarios-v2.zip`; you'll get a folder called
+  `classroom-scenarios-main`.
 * A free GitHub account (github.com).
 * A Render account. You can sign up at render.com using your GitHub account, which also
   connects the two. The free plan is enough.
@@ -56,18 +57,18 @@ change the code on GitHub, Render rebuilds the site automatically.
 2. Name it, for example `classroom-scenarios`. Choose **Private**, so only you can
    see the code. Leave the other options as they are and click **Create repository**.
 3. On the empty repository page, click the link **uploading an existing file**.
-4. Open the `aicss` folder on your computer. Select **everything inside it** (the
+4. Open the `classroom-scenarios-main` folder on your computer. Select **everything inside it** (the
    `backend` and `frontend` folders, `Dockerfile`, `render.yaml` and the other files)
    and drag it onto the upload area in your browser.
 
-   Drag the *contents* of `aicss`, not the `aicss` folder itself. Render looks for
+   Drag the *contents* of `classroom-scenarios-main`, not the folder itself. Render looks for
    `render.yaml` and `Dockerfile` at the top level of the repository.
 5. Wait for the files to finish uploading, then click **Commit changes** at the bottom.
 6. Check the result: the repository's main page should list `backend`, `frontend`,
    `Dockerfile`, `render.yaml`, `README.md` and so on directly, not inside another folder.
 
 > If you'd rather not drag files in a browser, **GitHub Desktop** (desktop.github.com)
-> does the same job: *File → Add local repository*, choose the `aicss` folder, then
+> does the same job: *File → Add local repository*, choose the `classroom-scenarios-main` folder, then
 > *Publish repository* with **Keep this code private** ticked.
 
 ### Part 1b: Create a free database on Neon
@@ -142,8 +143,8 @@ and conversations.
 ### Adding demo accounts (optional)
 
 To show the site to people, you can load a ready-made demo university: an account for every
-role, three classes, two scenarios and some sample student activity (including a couple
-of safety flags to review).
+role, three courses, three published scenarios and a draft, and sample student activity
+(including a paused session and safety flags to review). `docs/DEMO_GUIDE.md` explains it.
 
 1. In **classroomscenarios → Environment**, add `LOAD_DEMO_DATA` with the value `true`.
 2. Optionally add `DEMO_PASSWORD` with a password of your choice for all the demo
@@ -155,8 +156,11 @@ of safety flags to review).
 |---|---|
 | Administrator | `admin@demo.school` |
 | Instructor | `teacher@demo.school` (and `teacher2@demo.school`) |
-| Student | `student@demo.school` (and seven more, such as `leo@demo.school`) |
+| Student | `student@demo.school` (and nine more, such as `leo@demo.school`) |
 | IT support | `it@demo.school` |
+
+The sign-in page doesn't list these accounts or the password, so give them to the people
+you're showing the site to (`docs/DEMO_GUIDE.md` has a table you can copy).
 
 Demo accounts don't have to change their password at sign-in, so anyone who knows the
 demo password can sign in, including as the demo administrator. Before real students use

@@ -9,14 +9,12 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
-  // On a demo site the server lists the demo accounts, so nobody has to hunt for them.
-  const { data: demo } = useApi("/api/auth/demo");
-  const signIn = async (em, pw) => {
+  const submit = async (e) => {
+    e.preventDefault();
     if (busy) return;
     setBusy(true); setErr(null);
-    try { await login(em, pw); } catch (x) { setErr(x); } finally { setBusy(false); }
+    try { await login(email, password); } catch (x) { setErr(x); } finally { setBusy(false); }
   };
-  const submit = (e) => { e.preventDefault(); signIn(email, password); };
   return (
     <div className="login">
       <header className="masthead"><span className="wordmark"><Logo /><span>Classroom Scenarios</span></span></header>
@@ -33,21 +31,6 @@ export function Login() {
             <Field label="Password">{(id) => <input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
             <button className="btn primary block" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
             <p className="small muted">Forgot your password? Your instructor or an administrator can reset it.</p>
-            {demo?.demo && demo.accounts.length > 0 && (
-              <div className="demo-box">
-                <b>This is a demo site with sample data.</b>
-                <span className="small muted">{demo.password ? "Sign in as any role with one click:" : "Demo accounts (ask whoever set this up for the password):"}</span>
-                <ul>
-                  {demo.accounts.map((a) => (
-                    <li key={a.email}>
-                      {demo.password
-                        ? <button type="button" className="btn small" disabled={busy} onClick={() => signIn(a.email, demo.password)}>{a.role}</button>
-                        : <button type="button" className="btn small" onClick={() => setEmail(a.email)}>{a.role}</button>}
-                      <span className="small muted">{a.about}</span>
-                    </li>))}
-                </ul>
-              </div>
-            )}
           </form>
           <aside className="login-about">
             <Logo size={56} className="crest" />

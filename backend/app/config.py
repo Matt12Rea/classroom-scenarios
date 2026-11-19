@@ -54,7 +54,7 @@ ADMIN_RESET_PASSWORD = _bool("ADMIN_RESET_PASSWORD", False)
 # LOAD_DEMO_DATA=true adds sample accounts for every role, classes, scenarios and
 # activity on start-up (once). For showing the site to people, not for real use.
 LOAD_DEMO_DATA = _bool("LOAD_DEMO_DATA", False)
-DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "") or "demo-pass-1"
+# The demo password comes from DEMO_PASSWORD (read by seed.py; default demo-pass-1).
 
 # ---- AI engine ------------------------------------------------------------
 # These environment values are the defaults. An administrator can override the

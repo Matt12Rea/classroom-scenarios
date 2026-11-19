@@ -1,21 +1,19 @@
 # Requirements traceability
 
-Maps every requirement in the SRS (v1.0, Kyrin Ellis & Matt Rea, 9/24/2026) to where
-it is met in this version. **Status:** Met, Partial (works, with a stated limit), or
-Not started.
-
-Items marked **New in 1.0** were added in the website release (deployment, redesigned
-interface, AI connection management).
+Maps every requirement in the SRS (document v1.0, Kyrin Ellis & Matt Rea, 9/24/2026) to
+where it is met in **version 2** of the application. **Status:** Met, Partial (works, with a
+stated limit), or Not started. File and function names refer to the version 2 code; the
+table at the end lists the rows whose answer changed in version 2 (see also `CHANGES.md`).
 
 ## 2.4 Design and implementation constraints
 
 | Constraint | Status | Where |
 |---|---|---|
 | FERPA / COPPA student data privacy | Partial | Role-based access (`access.py`), data minimisation (no names/emails to Claude), retention purge and per-student deletion (`admin.py`). Formal compliance review is the institution's. |
-| HTTPS for all communications | Met (New in 1.0) | Caddy or Render terminate TLS; `FORCE_HTTPS` redirects HTTP and sends HSTS (`main.py`) |
+| HTTPS for all communications | Met | Caddy or Render terminate TLS; `FORCE_HTTPS` redirects HTTP and sends HSTS (`main.py`) |
 | AI responses within 2 seconds | Partial | Haiku model by default, history capped at 10 exchanges, slow replies flagged to the student (NFR-5.1.6). Depends on the external service. |
 | Claude AI as the primary engine, via a secure API interface | Met | `ai.py` is the only module that calls Claude; key server-side only (see 3.2) |
-| Application controls scenario progression, not the AI | Met | A judge call classifies the student's messages against the instructor's paths; the application validates the pick, applies limits and moves the scene (`play.py: student_turn`, `_advance`, `_wrap_up`) |
+| Application controls scenario progression, not the AI | Met | A judge call classifies the student's messages against the instructor's paths; the application validates the pick, applies limits and moves the scene. The rules are plain functions in `dialogue.py` (`turn_plan`, `decide`, `parse_judgement`); `engine.py` applies them: `take_turn` runs one student message, `advance` moves to the scene a path leads to, `wrap_up` ends an attempt that is out of messages. `routers/play.py` only checks access and calls `engine.take_turn` |
 
 ## 3.1 Scenario authoring and management
 
@@ -35,15 +33,15 @@ interface, AI connection management).
 | ID | Status | Where |
 |---|---|---|
 | REQ-3.2.3.1 Claude as primary engine | Met | `ai.ClaudeEngine` |
-| REQ-3.2.3.2 Submit scenario context | Met | `build_system_prompt` |
-| REQ-3.2.3.3 Character role and traits | Met | Scene speaker's name, role, personality |
+| REQ-3.2.3.2 Submit scenario context | Met | `dialogue.build_system_prompt` |
+| REQ-3.2.3.3 Character role and traits | Met | Each character's name, role and personality; a scene can have several characters, and each line is stored under its speaker (`scenario_schema.scene_cast`, `dialogue.parse_reply`) |
 | REQ-3.2.3.4 Conversation history | Met | Last `HISTORY_TURNS` exchanges |
 | REQ-3.2.3.5 Student's current input | Met | |
 | REQ-3.2.3.6 Scenario instructions and boundaries | Met | Instructor boundaries + fixed safety rules |
 | REQ-3.2.3.7 Validate response before display | Met | `moderation.screen_output`; blocked replies replaced and queued for review |
 | REQ-3.2.3.8 Record interactions | Met | `messages` table with tokens and latency |
-| REQ-3.2.3.9 Notify and recover when Claude is unavailable | Met (improved in 1.0) | Automatic retries with backoff; student keeps progress and can resend; admins see the cause on Overview and **AI connection** |
-| REQ-3.2.3.10 No unauthorized access to AI credentials | Met (New in 1.0) | Key never sent to browsers; dashboard key is write-only, encrypted at rest (`settings_store.py`), shown only as a hint; only admins can change it; all changes audited |
+| REQ-3.2.3.9 Notify and recover when Claude is unavailable | Met | Automatic retries with backoff; student keeps progress and can resend; admins see the cause on Overview and **AI connection** |
+| REQ-3.2.3.10 No unauthorized access to AI credentials | Met | Key never sent to browsers; dashboard key is write-only, encrypted at rest (`settings_store.py`), shown only as a hint; only admins can change it; all changes audited |
 
 ## 3.3 Problem-solving pathing
 
@@ -53,10 +51,10 @@ interface, AI connection management).
 | REQ-3.3.2 Multiple paths per decision point | Met | |
 | REQ-3.3.3 Each decision tied to a branch/outcome | Met | `choices[].next` |
 | REQ-3.3.4 Show next step after decision | Met | Scene change line and toast in the player |
-| REQ-3.3.5 Record each decision | Met | `decisions` table |
+| REQ-3.3.5 Record each decision | Met | `decisions` table, written by `engine.advance` |
 | REQ-3.3.6 Multiple completion outcomes | Met | Endings typed success / partial / didn't succeed |
 | REQ-3.3.7 Feedback on incomplete/invalid paths | Met | Dead ends, unreachable scenes and broken links flagged in the editor and on the map |
-| REQ-3.3.8 Students can't modify paths | Met | Server checks the choice against the frozen scenario snapshot |
+| REQ-3.3.8 Students can't modify paths | Met | `engine.advance` only follows paths in the session's frozen scenario snapshot, to scenes that exist |
 
 ## 3.4 Interactive case-based learning
 
@@ -98,7 +96,7 @@ interface, AI connection management).
 
 | Requirement | Status | Where |
 |---|---|---|
-| 4.1 Responsive web UI for all roles | Met (redesigned in 1.0) | Works from phone width up; consistent masthead, grouped navigation and breadcrumbs |
+| 4.1 Responsive web UI for all roles | Met | Works from phone width up; consistent masthead, grouped navigation and breadcrumbs |
 | 4.1 Confirmation after actions, clear errors | Met | Toasts and banners |
 | 4.1 Help from major areas | Met | Help in the masthead and user menu, role-specific |
 | 4.1 Readable typography and contrast | Met | Public Sans UI type; colours meet WCAG AA contrast |
@@ -107,9 +105,9 @@ interface, AI connection management).
 | 4.3 Cloud AI service interface | Met | |
 | 4.3 LMS integration (LTI) | Not started | See UC-07 |
 | 4.3 Validate external data; log integration errors without student data | Met | Error classes logged, never message text |
-| 4.4 HTTPS/TLS; session management | Met (New in 1.0) | TLS at the proxy; signed expiring tokens |
+| 4.4 HTTPS/TLS; session management | Met | TLS at the proxy; signed expiring tokens |
 | 4.4 Detect failures, retry without duplicates | Met | Browser retries only safe GET requests; server retries AI calls |
-| 4.4 No student data to external services unless required | Met | Only scenario text and conversation go to Claude; fonts and scripts are self-hosted (New in 1.0) |
+| 4.4 No student data to external services unless required | Met | Only scenario text and conversation go to Claude; fonts and scripts are self-hosted |
 
 ## 5 Nonfunctional
 
@@ -118,7 +116,7 @@ interface, AI connection management).
 | NFR-5.1.1 Pages within 3 s | Met | Static assets cached long-term with content hashes |
 | NFR-5.1.2 AI within 2 s for 90% | Partial | Depends on Claude; latency recorded per reply and shown to admins/IT |
 | NFR-5.1.3 Loading indicator after 1 s | Met | |
-| NFR-5.1.4 80 concurrent users | Met | Multiple worker processes, PostgreSQL, shared rate limits (New in 1.0) |
+| NFR-5.1.4 80 concurrent users | Met | Multiple worker processes, PostgreSQL, shared rate limits |
 | NFR-5.1.5 Queries within 2 s | Met | Indexed foreign keys |
 | NFR-5.1.6 Notify when external service is slow | Met | |
 | NFR-5.2.1 Admin can report/disable AI content | Met | Hide message; pause a session and resume it (from the flag, the conversation, the overview or the Conversations list). `safety.py` |
@@ -130,7 +128,7 @@ interface, AI connection management).
 | NFR-5.2.7 Users can report content | Met | Report on any character line |
 | NFR-5.3.1 Authentication required | Met | |
 | NFR-5.3.2 RBAC | Met | |
-| NFR-5.3.3 HTTPS/TLS | Met (New in 1.0) | |
+| NFR-5.3.3 HTTPS/TLS | Met | |
 | NFR-5.3.4 Secure password hashing | Met | PBKDF2-SHA256, 600k iterations |
 | NFR-5.3.5 Session timeout | Met | `SESSION_TIMEOUT_MINUTES` |
 | NFR-5.3.6 Students isolated from each other | Met | |
@@ -143,17 +141,17 @@ interface, AI connection management).
 | NFR-5.4.1–3 Usability | Met | Form-based builder; plain-language errors |
 | NFR-5.4.4 Preserve saved data on error | Met | |
 | NFR-5.4.5 Handle external outages | Met | |
-| NFR-5.4.6 Regular backups | Met (New in 1.0) | Nightly `pg_dump` (Docker) or Render managed backups |
+| NFR-5.4.6 Regular backups | Met | Nightly `pg_dump` (Docker) or Render managed backups |
 | NFR-5.4.7 99% availability | Partial | Health check endpoint and container restart policy; depends on hosting |
 | NFR-5.4.8 Maintenance notices | Not started | Use a banner or email for now |
-| NFR-5.4.9 Modular components | Met | AI, moderation, settings, routers separated |
-| NFR-5.4.10 Technical documentation | Met | README, DEPLOY, this file |
+| NFR-5.4.9 Modular components | Met | Rules (`scenario_schema`, `dialogue`, `moderation`, `exports`) separate from the parts that use the database or AI (`engine`, `safety`, `transcripts`, `ai`, `settings_store`); routers stay thin |
+| NFR-5.4.10 Technical documentation | Met | `README.md`, `DEPLOY.md`, `CHANGES.md`, `docs/USER_GUIDE.md`, `docs/TECHNICAL_GUIDE.md`, `docs/DEMO_GUIDE.md`, this file |
 | NFR-5.4.11 Diagnosable error logs | Met | |
 | NFR-5.4.12–13 Scalability | Met | Stateless app, horizontal scaling, shared rate limits |
 | NFR-5.4.14–15 Browsers and devices | Met | Current Chrome, Edge, Firefox, Safari; Windows, macOS, iOS, Android |
 | NFR-5.4.16 LMS interfaces documented | Not started | |
 | NFR-5.4.17 Standard protocols | Met | HTTPS/JSON |
-| NFR-5.4.18–19 Testability and logs | Met | `tests/test_api.py`; AI status recorded for admins/testers |
+| NFR-5.4.18–19 Testability and logs | Met | `tests/test_logic.py` and `tests/test_exports.py` (rules, no server), `tests/test_api.py` (end to end); AI status recorded for admins/testers |
 | NFR-5.5.1–6 Privacy | Met | What goes to Claude is documented on the Help and AI connection pages |
 | NFR-5.6.1 Keyboard access | Met | Skip link, focus trap in dialogs, keyboard-operable scenario map |
 | NFR-5.6.2 Text alternatives | Met | |
@@ -180,3 +178,17 @@ interface, AI connection management).
 |---|---|
 | Internationalisation (English, Spanish, French) | Not started (English only) |
 | Reuse of existing AI/NLP components | Met (Anthropic SDK) |
+
+## Rows that changed in version 2
+
+| Row | What changed |
+|---|---|
+| 2.4 Application controls scenario progression | Progression moved from `routers/play.py` into `engine.py` (`take_turn`, `advance`, `wrap_up`), with the rules in `dialogue.py` |
+| REQ-3.2.3.3 Character role and traits | Several characters can share a scene |
+| REQ-3.2.3.9 Recover when Claude is unavailable | An unexpected AI library error or failed judge call no longer loses the student's turn |
+| REQ-3.5.7 Export CSV or PDF | Logged conversations export as CSV or PDF |
+| NFR-5.2.1 Admin can disable AI content | Paused sessions can be resumed from the flag, the conversation, the overview and the Conversations list; the flag count restarts at each resume |
+| NFR-5.3.1 / NFR-5.3.9 Authentication, protecting stored information | The sign-in page no longer lists demo accounts, and the public `/api/auth/demo` endpoint (which returned demo account emails and the default demo password) has been removed |
+| NFR-5.4.9 Modular components | The play router was split into `dialogue`, `engine`, `safety`, `transcripts` and `exports` |
+| NFR-5.4.10 Technical documentation | Added the user guide and technical guide |
+

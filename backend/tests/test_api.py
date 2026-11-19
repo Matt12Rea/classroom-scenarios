@@ -537,11 +537,11 @@ def test_admin_exports_filtered_conversations():
         assert client.get("/api/admin/sessions/export.csv", headers=login(other)).status_code == 403
 
 
-def test_demo_sign_in_hints_and_demo_states():
-    hint = client.get("/api/auth/demo").json()
-    assert hint["demo"] and hint["password"] == seed.DEMO_PW
-    assert [a["email"] for a in hint["accounts"]] == ["admin@demo.school", "teacher@demo.school",
-                                                      "student@demo.school", "it@demo.school"]
+def test_no_public_demo_account_list_and_demo_states():
+    # The sign-in page no longer lists demo accounts, and the server no longer offers them
+    # (or the demo password) to anyone who asks.
+    r = client.get("/api/auth/demo")
+    assert r.status_code == 404 and "demo-pass" not in r.text
     # Every demo conversation ends the way its script says.
     adm = login("admin@demo.school")
     by_student = {}

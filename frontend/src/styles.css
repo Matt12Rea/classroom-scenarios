@@ -581,12 +581,6 @@ tbody tr:hover { background: var(--surface-2); }
 .status-note.paused { background: var(--warn-soft); border-color: var(--warn); color: #5a3a06; }
 .status-note.resumed { background: var(--ok-soft); border-color: var(--ok); color: #164d33; }
 
-/* sign-in: demo accounts */
-.demo-box { border: 1px dashed var(--brass); background: var(--brass-soft); border-radius: var(--r); padding: var(--s3) var(--s4); display: flex; flex-direction: column; gap: 4px; }
-.demo-box ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
-.demo-box li { display: grid; grid-template-columns: 124px 1fr; gap: var(--s3); align-items: center; }
-.demo-box .btn { width: 100%; }
-
 /* player: who is in the room */
 .brief .cast li { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; align-items: baseline; padding: 4px 0; }
 .brief .cast .muted { grid-column: 1 / -1; }

@@ -6,7 +6,7 @@ choices: a separate Claude call judges which of the instructor's paths the stude
 application makes the move.
 
 ```
-AICSG/
+classroom-scenarios-main/
 ├── backend/            FastAPI + SQLAlchemy (SQLite in dev, PostgreSQL-ready)
 │   ├── app/
 │   │   ├── main.py             app setup, security headers, serves the built frontend
@@ -51,7 +51,9 @@ AICSG/
 ├── render.yaml         one-click hosting on Render
 ├── DEPLOY.md           step-by-step guide to putting the site online
 ├── CHANGES.md          what changed in version 2
-└── docs/               DEMO_GUIDE.md (who is who in the demo, and a walkthrough),
+└── docs/               USER_GUIDE.md (how to use the site, for every role),
+                        TECHNICAL_GUIDE.md (architecture, data model, API, security, testing),
+                        DEMO_GUIDE.md (who is who in the demo, and a walkthrough),
                         REQUIREMENTS_TRACE.md (every SRS requirement and where it's met)
 ```
 
@@ -59,6 +61,11 @@ AICSG/
 `scenario_schema.py` with a test in `tests/test_logic.py`. A new export format goes in `exports.py`.
 A new screen calls an endpoint in `routers/`, which should stay a few lines: check access, call a
 module, return. Version 2 changes no database tables, so it runs on a version 1 database as it is.
+
+**Documentation.** [docs/USER_GUIDE.md](docs/USER_GUIDE.md) is for the people using the site
+(students, instructors, administrators, IT support). [docs/TECHNICAL_GUIDE.md](docs/TECHNICAL_GUIDE.md)
+is for whoever maintains it. [DEPLOY.md](DEPLOY.md) puts it online, [CHANGES.md](CHANGES.md) lists
+what version 2 changed, and [docs/REQUIREMENTS_TRACE.md](docs/REQUIREMENTS_TRACE.md) maps the SRS to the code.
 
 **To put the site online, follow [DEPLOY.md](DEPLOY.md).** The sections below are for
 running it on your own computer while developing.
@@ -82,11 +89,10 @@ Open http://localhost:8000. The backend serves `frontend/dist`, so this alone gi
 Public Sans and Source Serif 4 fonts.)
 
 Demo accounts: `admin@demo.school`, `teacher@demo.school` (an instructor), `student@demo.school`, `it@demo.school`.
-On a demo site the sign-in page lists them with one-click buttons. **[docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md)** says who is in which state and gives a five-minute walkthrough.
+Type one into the normal sign-in form with the password `demo-pass-1` (the sign-in page does not list them). **[docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md)** says who is in which state and gives a five-minute walkthrough.
 The demo includes three published, course-based scenarios (ECON 210: advising a community bank on interest-rate
 risk; PSYC 310: defending a deception study to the IRB; BIOL 340: explaining a cystic fibrosis carrier result)
 and a draft (HIST: the 1787 representation deadlock).
-Each uses the password `demo-pass-1`.
 
 **Frontend, when you're changing it** (Node 18+):
 
