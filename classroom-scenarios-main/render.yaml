@@ -1,0 +1,33 @@
+# Hosting on Render (render.com): New > Blueprint > pick this repository.
+#
+# This is the FREE setup: Render's free web service plus a free PostgreSQL
+# database from Neon (neon.com), which doesn't expire. See DEPLOY.md.
+# The free web service sleeps after 15 minutes without visitors and takes about
+# a minute to wake up on the next visit.
+#
+# To move to paid hosting later: change "plan: free" to "plan: 0.5c-512mb".
+services:
+  - type: web
+    name: classroomscenarios
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false          # paste the connection string from Neon
+      - key: RATE_LIMIT_BACKEND
+        value: db
+      - key: WEB_CONCURRENCY
+        value: "1"           # the free plan has little memory; one process is enough for a class
+      - key: ANTHROPIC_API_KEY
+        sync: false          # or leave empty and add it later in Admin > AI connection
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-haiku-5-5

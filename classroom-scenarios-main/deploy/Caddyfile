@@ -1,0 +1,10 @@
+# Caddy terminates HTTPS (automatic Let's Encrypt certificates, renewed for you)
+# and forwards requests to the app. Plain HTTP is redirected to HTTPS.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8000
+	log {
+		output stdout
+		format console
+	}
+}

@@ -1,0 +1,356 @@
+// Instructor home, scenario list, results/analytics (SRS 3.5), and courses.
+import { useState } from "react";
+import { api, fmtDate, fmtDateTime, navigate, useApi, useAuth, useBusy, useToast } from "../../lib.jsx";
+import { Breadcrumbs, Confirm, Empty, ErrorBanner, ExportMenu, Field, Icon, Loading, Modal, PageHead, Status } from "../../ui.jsx";
+
+export function TeacherHome() {
+  const { user } = useAuth();
+  const { data, error, loading, reload } = useApi("/api/teacher/overview");
+  return (
+    <div className="page">
+      <PageHead title={`Welcome back, ${user.name.split(" ")[0]}`} sub="Recent student activity across your scenarios.">
+        <NewScenarioButton primary />
+      </PageHead>
+      <ErrorBanner error={error} onRetry={reload} />
+      {loading && !data && <Loading />}
+      {data && <>
+        <div className="figures">
+          <div className="figure"><b>{data.scenarios.published || 0}</b><span>published scenarios</span></div>
+          <div className="figure"><b>{data.scenarios.draft || 0}</b><span>drafts</span></div>
+          <div className="figure"><b>{data.in_progress}</b><span>students mid-scenario</span></div>
+          <div className="figure"><b>{data.completed}</b><span>completed attempts</span></div>
+        </div>
+        <div className="panel">
+          <div className="panel-head"><h2>Recent activity</h2><a href="/scenarios">All scenarios</a></div>
+          {data.recent.length === 0 ? <Empty title="No activity yet">Assign a published scenario to a course to see activity here.</Empty> : (
+            <div className="table-wrap" style={{ border: 0 }}>
+              <table>
+                <thead><tr><th>Student</th><th>Scenario</th><th>Status</th><th>Outcome</th><th>Last activity</th><th><span className="sr-only">Open</span></th></tr></thead>
+                <tbody>{data.recent.map((r) => (
+                  <tr key={r.session_id}>
+                    <td>{r.student}</td><td>{r.scenario}</td><td><Status value={r.status} /></td>
+                    <td>{r.outcome_type ? <span className={`badge ${r.outcome_type}`}>{r.outcome}</span> : <span className="muted">–</span>}</td>
+                    <td className="nowrap">{fmtDateTime(r.updated_at)}</td>
+                    <td><a href={`/sessions/${r.session_id}`}>Conversation</a></td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </>}
+    </div>
+  );
+}
+
+function NewScenarioButton({ primary }) {
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState(null);
+  const [run, busy] = useBusy();
+  const create = (template) => run(async () => {
+    setErr(null);
+    try { const r = await api("/api/scenarios", { method: "POST", body: { template } }); navigate(`/scenarios/${r.id}`); }
+    catch (e) { setErr(e); }
+  });
+  return <>
+    <button className={`btn ${primary ? "primary" : ""}`} onClick={() => setOpen(true)}>Create scenario</button>
+    {open && (
+      <Modal title="Create a scenario" onClose={() => setOpen(false)}>
+        <ErrorBanner error={err} />
+        <div className="stack">
+          <button className="choice" disabled={busy} onClick={() => create("blank")}><span>Start from scratch<br /><span className="small muted" style={{ fontWeight: 400 }}>An empty scenario with standard safety boundaries.</span></span></button>
+          <button className="choice" disabled={busy} onClick={() => create("example")}><span>Start from an example<br /><span className="small muted" style={{ fontWeight: 400 }}>A complete money-and-banking scenario to learn from and edit.</span></span></button>
+        </div>
+        <div className="modal-foot"><button className="btn quiet" onClick={() => setOpen(false)}>Cancel</button></div>
+      </Modal>
+    )}
+  </>;
+}
+
+// The scenario manager: every scenario with its state, and the next thing to do with it.
+const STAGE = {
+  draft: (s) => (s.ready ? ["Ready to publish", "ok"] : ["Still being built", "warn"]),
+  published: (s) => (s.assignments.length ? [`Live in ${s.assignments.length} course${s.assignments.length === 1 ? "" : "s"}`, "ok"] : ["Published, not assigned yet", "warn"]),
+  archived: () => ["Archived", ""],
+};
+
+export function ScenarioList() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const { data, error, loading, reload } = useApi("/api/scenarios");
+  const [filter, setFilter] = useState("all");
+  const [q, setQ] = useState("");
+  const [err, setErr] = useState(null);
+  const [run, busy] = useBusy();
+  const counts = { all: 0, draft: 0, published: 0, archived: 0 };
+  (data || []).forEach((s) => { counts[s.status] = (counts[s.status] || 0) + 1; if (s.status !== "archived") counts.all++; });
+  const needle = q.trim().toLowerCase();
+  const list = data?.filter((s) => (filter === "all" ? s.status !== "archived" : s.status === filter))
+    .filter((s) => !needle || s.title.toLowerCase().includes(needle) || (s.owner_name || "").toLowerCase().includes(needle));
+  const act = (s, kind) => run(async () => {
+    setErr(null);
+    try {
+      if (kind === "preview") {
+        const st = await api("/api/sessions", { method: "POST", body: { scenario_id: s.id, preview: true } });
+        navigate(`/preview/${st.id}`); return;
+      }
+      const r = await api(`/api/scenarios/${s.id}/${kind}`, { method: "POST" });
+      if (kind === "duplicate") { toast("Copy created."); navigate(`/scenarios/${r.id}`); return; }
+      toast({ archive: "Archived.", restore: "Restored as a draft." }[kind]); reload();
+    } catch (e) { setErr(e); }
+  });
+  return (
+    <div className="page">
+      <PageHead title="Scenarios" sub={user.role === "admin" ? "Every scenario on the site." : "Build, publish and assign your scenarios."}>
+        <NewScenarioButton primary />
+      </PageHead>
+      <div className="row between tabs-row">
+        <div className="tabs" role="tablist">
+          {[["all", "All active"], ["draft", "Drafts"], ["published", "Published"], ["archived", "Archived"]].map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)}>{label}<span className="tab-count">{counts[k] || 0}</span></button>))}
+        </div>
+        <div style={{ minWidth: 220 }}><label htmlFor="sq" className="sr-only">Search scenarios</label>
+          <input id="sq" type="search" placeholder="Search by title" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      </div>
+      <ErrorBanner error={error || err} onRetry={error ? reload : null} />
+      {loading && !data && <Loading />}
+      {list && list.length === 0 && (
+        <Empty title={needle ? "No scenarios match that search" : filter === "archived" ? "Nothing archived" : "No scenarios here yet"}>
+          {!needle && filter !== "archived" && "Create a scenario, or start from the example to see how one is put together."}
+        </Empty>)}
+      {list && list.length > 0 && (
+        <ul className="scenario-cards">
+          {list.map((s) => {
+            const [stage, tone] = (STAGE[s.status] || STAGE.draft)(s);
+            return (
+              <li key={s.id}>
+                <div className="sc-main">
+                  <div className="row">
+                    <h2><a href={`/scenarios/${s.id}`}>{s.title}</a></h2>
+                    <Status value={s.status} />
+                  </div>
+                  {s.description && <p className="sc-desc">{s.description}</p>}
+                  <dl className="sc-facts">
+                    <div><dt>Stage</dt><dd className={tone}>{stage}</dd></div>
+                    <div><dt>Contents</dt><dd>{s.scene_count} scene{s.scene_count === 1 ? "" : "s"}, {s.ending_count} ending{s.ending_count === 1 ? "" : "s"}, {s.character_count} character{s.character_count === 1 ? "" : "s"}</dd></div>
+                    <div><dt>Assigned to</dt><dd>{s.assignments.map((a) => a.class_name).join(", ") || "No course yet"}</dd></div>
+                    <div><dt>Attempts</dt><dd>{s.sessions}</dd></div>
+                    <div><dt>Updated</dt><dd>{fmtDate(s.updated_at)}{user.role === "admin" && s.owner_name ? `, ${s.owner_name}` : ""}</dd></div>
+                  </dl>
+                </div>
+                <div className="sc-actions">
+                  <a className="btn primary small" href={`/scenarios/${s.id}`}>{s.status === "archived" ? "Open" : "Edit"}</a>
+                  {s.status !== "archived" && <button className="btn small" disabled={busy} onClick={() => act(s, "preview")}><Icon name="eye" size={15} />Preview</button>}
+                  <a className="btn small" href={`/scenarios/${s.id}/results`}><Icon name="chart" size={15} />Results</a>
+                  <button className="btn small" disabled={busy} onClick={() => act(s, "duplicate")}><Icon name="copy" size={15} />Duplicate</button>
+                  {s.status === "archived"
+                    ? <button className="btn small" disabled={busy} onClick={() => act(s, "restore")}>Restore</button>
+                    : <button className="btn quiet small" disabled={busy} onClick={() => act(s, "archive")}>Archive</button>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function Results({ id }) {
+  const { data: classes } = useApi("/api/classes");
+  const [f, setF] = useState({ class_id: "", from: "", to: "" });
+  const qs = new URLSearchParams(Object.entries({ ...f, from: f.from && new Date(f.from).toISOString(), to: f.to && new Date(f.to + "T23:59:59").toISOString() }).filter(([, v]) => v)).toString();
+  const { data, error, loading, reload } = useApi(`/api/scenarios/${id}/analytics${qs ? "?" + qs : ""}`);
+
+  return (
+    <div className="page">
+      <Breadcrumbs items={[["/scenarios", "Scenarios"], [`/scenarios/${id}`, data?.scenario.title || "Scenario"], [null, "Results"]]} />
+      <PageHead title={data ? `Results: ${data.scenario.title}` : "Results"}>
+        <ExportMenu label="Export" items={[
+          { label: "Results summary (CSV)", hint: "One row per attempt: outcome, messages, paths", path: `/api/scenarios/${id}/export.csv${qs ? "?" + qs : ""}`, filename: "results.csv" },
+          { label: "Conversations (PDF)", hint: "Full transcripts to read or print", path: `/api/scenarios/${id}/conversations.pdf${qs ? "?" + qs : ""}`, filename: "conversations.pdf" },
+          { label: "Conversations (CSV)", hint: "Every line of every conversation", path: `/api/scenarios/${id}/conversations.csv${qs ? "?" + qs : ""}`, filename: "conversations.csv" }]} />
+      </PageHead>
+      <div className="panel tight row" style={{ marginBottom: 20, alignItems: "flex-end" }}>
+        <Field label="Course">{(fid) => (
+          <select id={fid} value={f.class_id} onChange={(e) => setF({ ...f, class_id: e.target.value })}>
+            <option value="">All my courses</option>{classes?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>)}</Field>
+        <Field label="Started from">{(fid) => <input id={fid} type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />}</Field>
+        <Field label="to">{(fid) => <input id={fid} type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />}</Field>
+        {(f.class_id || f.from || f.to) && <button className="btn quiet" onClick={() => setF({ class_id: "", from: "", to: "" })}>Clear filters</button>}
+      </div>
+      <ErrorBanner error={error} onRetry={reload} />
+      {loading && !data && <Loading />}
+      {data && <ResultsBody data={data} />}
+    </div>
+  );
+}
+
+function ResultsBody({ data }) {
+  const s = data.summary;
+  const pct = (n) => (s.completed ? (n / s.completed) * 100 : 0);
+  if (s.assigned === 0) return <Empty title="No students to report on">Assign it to a course with students, or clear the filters.</Empty>;
+  return <>
+    <div className="figures">
+      <div className="figure"><b>{s.started} / {s.assigned}</b><span>students started</span></div>
+      <div className="figure"><b>{s.completed}</b><span>finished</span></div>
+      <div className="figure"><b>{s.avg_turns ?? "–"}</b><span>avg. messages to finish</span></div>
+      <div className="figure"><b>{s.avg_minutes != null ? `${s.avg_minutes} min` : "–"}</b><span>avg. time to finish</span></div>
+    </div>
+    <div className="grid-2" style={{ marginBottom: 20 }}>
+      <div className="panel">
+        <h2>Endings reached</h2>
+        <p className="small muted" style={{ margin: "4px 0 12px" }}>Each student's latest attempt.</p>
+        {s.completed === 0 ? <p className="muted">No one has finished yet.</p> : <>
+          <div className="bar" role="img" aria-label={`${s.success} success, ${s.partial} partial, ${s.fail} didn't succeed`}>
+            <span className="success" style={{ width: `${pct(s.success)}%` }} /><span className="partial" style={{ width: `${pct(s.partial)}%` }} /><span className="fail" style={{ width: `${pct(s.fail)}%` }} />
+          </div>
+          <div className="legend"><span><i style={{ background: "var(--ok)" }} />Success {s.success}</span><span><i style={{ background: "var(--pencil)" }} />Partial {s.partial}</span><span><i style={{ background: "var(--bad)" }} />Didn't succeed {s.fail}</span></div>
+          <ul style={{ marginTop: 12, paddingLeft: 18 }}>{data.outcomes.map((o) => <li key={o.label}>{o.label}: <b>{o.count}</b></li>)}</ul>
+        </>}
+      </div>
+      <div className="panel">
+        <h2>Paths taken</h2>
+        <p className="small muted" style={{ margin: "4px 0 12px" }}>Across all attempts.</p>
+        {data.decisions.map((dn) => {
+          const total = dn.choices.reduce((a, c) => a + c.count, 0);
+          return (
+            <div key={dn.node} style={{ marginBottom: 14 }}>
+              <h3 style={{ fontSize: "0.95rem" }}>{dn.node_title}</h3>
+              {total === 0 ? <p className="small muted">No one reached this scene.</p> : dn.choices.map((c) => (
+                <div className="hbar" key={c.label}>
+                  <span className="small">{c.label}</span>
+                  <span className="track" aria-hidden="true"><span style={{ width: `${(c.count / total) * 100}%` }} /></span>
+                  <span className="small num">{c.count}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+    <h2 style={{ marginBottom: 12 }}>Students</h2>
+    <div className="table-wrap">
+      <table>
+        <thead><tr><th>Student</th><th>Course</th><th>Status</th><th>Outcome</th><th className="num">Messages</th><th className="num">Attempts</th><th>Last activity</th><th><span className="sr-only">Open</span></th></tr></thead>
+        <tbody>{data.students.map((r) => (
+          <tr key={r.student_id}>
+            <td>{r.name}{r.flags > 0 && <> <span className="badge high" title="Has safety flags">{r.flags} flag{r.flags > 1 ? "s" : ""}</span></>}</td>
+            <td className="small">{r.class_name}</td>
+            <td><Status value={r.status} /></td>
+            <td>{r.outcome_type ? <span className={`badge ${r.outcome_type}`}>{r.outcome}</span> : <span className="muted">–</span>}</td>
+            <td className="num">{r.turns}</td><td className="num">{r.attempts}</td>
+            <td className="nowrap">{fmtDateTime(r.last_activity)}</td>
+            <td>{r.session_id && <a href={`/sessions/${r.session_id}`}>Conversation</a>}</td>
+          </tr>))}</tbody>
+      </table>
+    </div>
+  </>;
+}
+
+export function Classes() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const { data, error, loading, reload } = useApi("/api/classes");
+  const { data: teachers } = useApi(user.role === "admin" ? "/api/admin/users?role=teacher" : null);
+  const [creating, setCreating] = useState(false);
+  const [adding, setAdding] = useState(null);
+  const [removing, setRemoving] = useState(null);
+  const [err, setErr] = useState(null);
+
+  return (
+    <div className="page">
+      <PageHead title="Courses" sub={user.role === "admin" ? "Every course on the site and its instructor." : "Your courses and the students in them."}>
+        <button className="btn primary" onClick={() => setCreating(true)}>Create course</button>
+      </PageHead>
+      <ErrorBanner error={error || err} onRetry={error ? reload : null} />
+      {loading && !data && <Loading />}
+      {data?.length === 0 && <Empty title="No courses yet">Create a course and add students to start assigning scenarios.</Empty>}
+      <div className="stack">
+        {data?.map((c) => (
+          <section className="panel" key={c.id}>
+            <div className="panel-head">
+              <div><h2>{c.name}</h2>{user.role === "admin" && <span className="small muted">{c.teacher_name || "No instructor"}</span>}</div>
+              <div className="row">
+                <button className="btn small" onClick={() => setAdding(c)}>Add students</button>
+                <button className="btn quiet small" onClick={() => setRemoving({ kind: "class", c })}>Delete course</button>
+              </div>
+            </div>
+            {c.students.length === 0 ? <p className="muted">No students yet.</p> : (
+              <div className="table-wrap"><table>
+                <thead><tr><th>Name</th><th>Email</th><th><span className="sr-only">Actions</span></th></tr></thead>
+                <tbody>{c.students.map((s) => (
+                  <tr key={s.id}><td>{s.name}{!s.active && <> <Status value="disabled" label="Disabled" /></>}</td><td className="small">{s.email}</td>
+                    <td className="num"><button className="btn quiet small" onClick={() => setRemoving({ kind: "student", c, s })}>Remove</button></td></tr>))}
+                </tbody>
+              </table></div>
+            )}
+          </section>
+        ))}
+      </div>
+      {creating && <CreateClass teachers={teachers} isAdmin={user.role === "admin"} onClose={() => setCreating(false)} onDone={() => { reload(); toast("Course created."); }} />}
+      {adding && <AddStudents cls={adding} onClose={() => setAdding(null)} onDone={reload} />}
+      {removing?.kind === "student" && (
+        <Confirm title={`Remove ${removing.s.name}?`} confirmLabel="Remove from course" onClose={() => setRemoving(null)} onConfirm={async () => {
+          try { await api(`/api/classes/${removing.c.id}/students/${removing.s.id}`, { method: "DELETE" }); toast("Student removed."); reload(); } catch (e) { setErr(e); }
+        }}><p>They'll stop seeing scenarios assigned to {removing.c.name}. Their past results are kept.</p></Confirm>
+      )}
+      {removing?.kind === "class" && (
+        <Confirm title={`Delete ${removing.c.name}?`} danger confirmLabel="Delete course" onClose={() => setRemoving(null)} onConfirm={async () => {
+          try { await api(`/api/classes/${removing.c.id}`, { method: "DELETE" }); toast("Course deleted."); reload(); } catch (e) { setErr(e); }
+        }}><p>Students keep their accounts and results but lose access to this course's scenarios.</p></Confirm>
+      )}
+    </div>
+  );
+}
+
+function CreateClass({ teachers, isAdmin, onClose, onDone }) {
+  const [name, setName] = useState("");
+  const [teacher, setTeacher] = useState("");
+  const [err, setErr] = useState(null);
+  const submit = async () => {
+    try { await api("/api/classes", { method: "POST", body: { name, teacher_id: teacher ? Number(teacher) : null } }); onDone(); onClose(); }
+    catch (e) { setErr(e); }
+  };
+  return (
+    <Modal title="Create course" onClose={onClose}>
+      <ErrorBanner error={err} />
+      <div className="stack">
+        <Field label="Course name">{(fid) => <input id={fid} type="text" value={name} placeholder="PSYC 310 – Research Methods (Fall)" onChange={(e) => setName(e.target.value)} />}</Field>
+        {isAdmin && <Field label="Instructor">{(fid) => (
+          <select id={fid} value={teacher} onChange={(e) => setTeacher(e.target.value)}>
+            <option value="">Choose an instructor…</option>{teachers?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>)}</Field>}
+      </div>
+      <div className="modal-foot"><button className="btn quiet" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!name.trim()} onClick={submit}>Create course</button></div>
+    </Modal>
+  );
+}
+
+function AddStudents({ cls, onClose, onDone }) {
+  const toast = useToast();
+  const [text, setText] = useState("");
+  const [err, setErr] = useState(null);
+  const [result, setResult] = useState(null);
+  const submit = async () => {
+    try {
+      const r = await api(`/api/classes/${cls.id}/students`, { method: "POST", body: { emails: text.split(/[\s,;]+/).filter(Boolean) } });
+      setResult(r); onDone();
+      if (!r.not_found.length) { toast(`Added ${r.added.length} student${r.added.length === 1 ? "" : "s"}.`); onClose(); }
+    } catch (e) { setErr(e); }
+  };
+  return (
+    <Modal title={`Add students to ${cls.name}`} onClose={onClose}>
+      <ErrorBanner error={err} />
+      {result?.not_found.length > 0 && (
+        <div className="banner warn">Added {result.added.length}. These emails don't match a student account, so ask an administrator to create them:
+          <ul>{result.not_found.map((e) => <li key={e}>{e}</li>)}</ul></div>
+      )}
+      <Field label="Student emails" hint="Separate with commas, spaces or new lines.">
+        {(fid) => <textarea id={fid} rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="maya@university.edu, leo@university.edu" />}
+      </Field>
+      <div className="modal-foot"><button className="btn quiet" onClick={onClose}>Close</button><button className="btn primary" disabled={!text.trim()} onClick={submit}>Add students</button></div>
+    </Modal>
+  );
+}
+
