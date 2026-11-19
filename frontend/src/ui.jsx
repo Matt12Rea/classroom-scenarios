@@ -45,12 +45,20 @@ export function Empty({ title, children }) {
 
 export function Modal({ title, onClose, children, wide }) {
   const ref = useRef(null);
+  // Callers usually pass a new onClose function on every render. Reading it through a
+  // ref keeps the effect below to open/close only; otherwise each re-render of the
+  // parent would move focus back to the first field while someone is typing.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const prev = document.activeElement;
     const el = ref.current;
     el?.querySelector("input, textarea, select, button")?.focus();
     const onKey = (e) => {
-      if (e.key === "Escape") onClose();
+      // With a dialog opened from a dialog, only the one on top responds.
+      const open = document.querySelectorAll(".modal");
+      if (open.length && open[open.length - 1] !== el) return;
+      if (e.key === "Escape") closeRef.current();
       if (e.key === "Tab" && el) {     // keep keyboard focus inside the dialog
         const f = [...el.querySelectorAll("button, [href], input, select, textarea")].filter((x) => !x.disabled);
         if (!f.length) return;
@@ -60,9 +68,9 @@ export function Modal({ title, onClose, children, wide }) {
     };
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("keydown", onKey); prev?.focus?.(); };
-  }, [onClose]);
+  }, []);
   return (
-    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && closeRef.current()}>
       <div className={`modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <h2>{title}</h2>
         {children}

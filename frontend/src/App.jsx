@@ -71,7 +71,8 @@ function Shell() {
   const { path } = useRoute();
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [path]);
-  const { data: openFlags } = useApi(user?.role === "admin" ? "/api/admin/flags?status=open" : null, [path]);
+  // Not while a temporary password is being replaced: the server refuses everything else until then.
+  const { data: openFlags } = useApi(user?.role === "admin" && !user.must_change_password ? "/api/admin/flags?status=open" : null, [path]);
 
   useEffect(() => {
     const label = NAV[user?.role]?.flatMap(([, items]) => items).find(([to]) => to !== "/" && path.startsWith(to))?.[1];

@@ -252,7 +252,9 @@ development the interactive docs are at `/api/docs`; production hides them.
 ## 7. Security and privacy
 
 * **Passwords**: PBKDF2-SHA256, 600,000 iterations. Minimum length `PASSWORD_MIN_LENGTH`.
-  Temporary passwords force a change at next sign-in.
+  Temporary passwords force a change at next sign-in. The server enforces this: until the
+  password is changed, every endpoint except `/api/auth/me`, `/api/auth/refresh` and
+  `/api/auth/password` answers 403.
 * **Tokens**: signed with `SECRET_KEY`, expire after `SESSION_TIMEOUT_MINUTES` of
   inactivity; the UI refreshes them while the user is active. Disabling an account or
   changing a password bumps `token_version`, so old tokens stop working at once.

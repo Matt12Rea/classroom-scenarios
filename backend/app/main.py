@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 
 from . import config, errors
 from .database import SessionLocal, init_db
@@ -94,7 +95,13 @@ def bootstrap_admin():
             db.flush()
             audit(db, None, "admin.bootstrap_create", f"user:{u.id}", email=config.ADMIN_EMAIL)
             action = "Created first administrator"
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            # With several workers, each runs this at start-up; another one got there first.
+            db.rollback()
+            log.info("First administrator was created by another worker.")
+            return
         log.warning("%s %s. %s", action, config.ADMIN_EMAIL,
                     "Sign in with ADMIN_PASSWORD; you'll be asked to choose a new password."
                     if config.ADMIN_PASSWORD else f"Temporary password: {pw}")

@@ -21,9 +21,12 @@ from . import config, moderation
 from .models import Flag, Message, PlaySession, User, audit, now
 
 # Flags that count towards an automatic pause: the student's own flagged messages.
-# Self-harm is excluded: it gets support, not a penalty.
+# Self-harm is excluded: it gets support, not a penalty. Personal info is excluded too:
+# it's flagged so an administrator can protect the student, but it isn't misuse, and the
+# pattern also matches in-story details ("the house at 412 Elm Street"), so it must not
+# pause a session or stop a scene from moving on.
 PAUSE_SOURCES = ("auto_input", "ai_review", "ai_judge")
-PAUSE_EXCLUDED = ("self_harm", "repeated")
+PAUSE_EXCLUDED = ("self_harm", "repeated", "personal_info")
 PAUSE_MESSAGE = ("Paused for review: several of your messages were flagged. You can continue once an "
                  "administrator resumes the session.")
 ADMIN_PAUSE_MESSAGE = ("An administrator has paused this session for review. You can continue once it is resumed.")

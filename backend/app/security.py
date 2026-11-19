@@ -69,7 +69,13 @@ def create_token(user: User) -> tuple[str, datetime]:
     return token, exp
 
 
-def current_user(authorization: str = Header(default=""), db: Session = Depends(get_db)) -> User:
+# What an account still on a temporary password may do: see who it is, keep its
+# session alive, and choose a new password. Everything else waits until it has.
+_ALLOWED_BEFORE_PASSWORD_CHANGE = {"/api/auth/me", "/api/auth/refresh", "/api/auth/password"}
+
+
+def current_user(request: Request, authorization: str = Header(default=""),
+                 db: Session = Depends(get_db)) -> User:
     """Replaces the old 'student:42' placeholder. The token is signed, expires,
     and is re-checked against the database on every request so a disabled account
     or changed password locks the user out immediately."""
@@ -78,13 +84,18 @@ def current_user(authorization: str = Header(default=""), db: Session = Depends(
         raise HTTPException(401, "Please sign in.")
     try:
         data = jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])
+        user_id = int(data["sub"])
     except jwt.ExpiredSignatureError:
         raise HTTPException(401, "Your session expired. Please sign in again.")
-    except jwt.PyJWTError:
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError):
         raise HTTPException(401, "Please sign in.")
-    user = db.get(User, int(data["sub"]))
+    user = db.get(User, user_id)
     if not user or not user.active or user.token_version != data.get("tv"):
         raise HTTPException(401, "Please sign in.")
+    # A temporary password must be replaced before the account can do anything else.
+    # The sign-in screen enforces this too, but the API must not rely on the browser.
+    if user.must_change_password and request.url.path not in _ALLOWED_BEFORE_PASSWORD_CHANGE:
+        raise HTTPException(403, "Choose a new password before continuing.")
     return user
 
 

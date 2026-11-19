@@ -129,8 +129,8 @@ function KeySection({ data, canEdit, onChange }) {
       {confirm && (
         <Confirm title="Remove the saved key?" danger confirmLabel="Remove key" onClose={() => setConfirm(false)}
           onConfirm={async () => {
-            try { const r = await api("/api/admin/ai/key", { method: "DELETE" }); onChange(r); toast("Key removed."); }
-            catch (x) { setErr(x); }
+            // Errors are left to Confirm, which stays open and shows them.
+            const r = await api("/api/admin/ai/key", { method: "DELETE" }); onChange(r); toast("Key removed.");
           }}>
           <p>{data.environment_key_hint
             ? `The site will go back to using the key set on the server (${data.environment_key_hint}).`

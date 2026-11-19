@@ -158,7 +158,9 @@ export function ScenarioList() {
 export function Results({ id }) {
   const { data: classes } = useApi("/api/classes");
   const [f, setF] = useState({ class_id: "", from: "", to: "" });
-  const qs = new URLSearchParams(Object.entries({ ...f, from: f.from && new Date(f.from).toISOString(), to: f.to && new Date(f.to + "T23:59:59").toISOString() }).filter(([, v]) => v)).toString();
+  // Both ends in the viewer's own time zone. (A bare "2026-11-18" is read as UTC midnight,
+  // which would shift the start of the range by the time-zone offset.)
+  const qs = new URLSearchParams(Object.entries({ ...f, from: f.from && new Date(f.from + "T00:00:00").toISOString(), to: f.to && new Date(f.to + "T23:59:59.999").toISOString() }).filter(([, v]) => v)).toString();
   const { data, error, loading, reload } = useApi(`/api/scenarios/${id}/analytics${qs ? "?" + qs : ""}`);
 
   return (
@@ -292,12 +294,13 @@ export function Classes() {
       {adding && <AddStudents cls={adding} onClose={() => setAdding(null)} onDone={reload} />}
       {removing?.kind === "student" && (
         <Confirm title={`Remove ${removing.s.name}?`} confirmLabel="Remove from course" onClose={() => setRemoving(null)} onConfirm={async () => {
-          try { await api(`/api/classes/${removing.c.id}/students/${removing.s.id}`, { method: "DELETE" }); toast("Student removed."); reload(); } catch (e) { setErr(e); }
+          // Errors are left to Confirm, which stays open and shows them.
+          await api(`/api/classes/${removing.c.id}/students/${removing.s.id}`, { method: "DELETE" }); toast("Student removed."); reload();
         }}><p>They'll stop seeing scenarios assigned to {removing.c.name}. Their past results are kept.</p></Confirm>
       )}
       {removing?.kind === "class" && (
         <Confirm title={`Delete ${removing.c.name}?`} danger confirmLabel="Delete course" onClose={() => setRemoving(null)} onConfirm={async () => {
-          try { await api(`/api/classes/${removing.c.id}`, { method: "DELETE" }); toast("Course deleted."); reload(); } catch (e) { setErr(e); }
+          await api(`/api/classes/${removing.c.id}`, { method: "DELETE" }); toast("Course deleted."); reload();
         }}><p>Students keep their accounts and results but lose access to this course's scenarios.</p></Confirm>
       )}
     </div>

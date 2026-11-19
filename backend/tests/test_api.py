@@ -243,6 +243,8 @@ def test_admin_user_management():
     h = login("new@demo.school", pw)
     me = client.get("/api/auth/me", headers=h).json()
     assert me["must_change_password"]
+    # Until the temporary password is replaced, the API refuses everything else.
+    assert client.get("/api/student/assignments", headers=h).status_code == 403
     r = client.post("/api/auth/password", json={"current_password": pw, "new_password": "brand-new-1"}, headers=h)
     assert r.status_code == 200
     assert client.get("/api/auth/me", headers=h).status_code == 401           # old token revoked

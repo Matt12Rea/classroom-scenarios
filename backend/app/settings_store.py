@@ -163,6 +163,8 @@ def record_ai_result(ok: bool, kind: str = "", latency_ms: int | None = None):
         try:
             raw, _, _ = _read(AI_STATUS_KEY)
             raw.update(_status_mem)
+            if ok:      # update() alone would keep the old failure count after a recovery
+                raw.pop("consecutive_errors", None)
             _write(AI_STATUS_KEY, raw)
             _status_written = time.monotonic()
         except Exception:                     # never break a student's turn over bookkeeping

@@ -276,7 +276,8 @@ function ManageUser({ u, isSelf, onClose, onDone }) {
       <div className="modal-foot"><button className="btn quiet" onClick={onClose}>Cancel</button><button className="btn primary" onClick={() => save(f, "Changes saved.")}>Save changes</button></div>
       {confirm === "data" && (
         <Confirm title={`Delete all of ${u.name}'s conversations?`} danger confirmLabel="Delete permanently" onClose={() => setConfirm(null)} onConfirm={async () => {
-          try { const r = await api(`/api/admin/users/${u.id}/data`, { method: "DELETE" }); toast(`Deleted ${r.deleted_sessions} conversation${r.deleted_sessions === 1 ? "" : "s"}.`); onDone(); } catch (e) { setErr(e); }
+          // Errors are left to Confirm, which stays open and shows them.
+          const r = await api(`/api/admin/users/${u.id}/data`, { method: "DELETE" }); toast(`Deleted ${r.deleted_sessions} conversation${r.deleted_sessions === 1 ? "" : "s"}.`); onDone();
         }}><p>For data-deletion requests. Permanently removes their conversations and results; the account stays.</p></Confirm>
       )}
     </Modal>

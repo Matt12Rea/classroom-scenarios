@@ -1,5 +1,33 @@
 # Version 2: what changed
 
+## Fixes after review (2.0.1)
+
+No database changes. Rebuilt `frontend/dist` is included.
+
+* **Temporary passwords are now enforced by the server.** The forced password change was only
+  enforced by the sign-in screen: an account with a temporary password could call every API
+  endpoint directly. Until the password is changed, only `/api/auth/me`, `/api/auth/refresh`
+  and `/api/auth/password` work; everything else answers 403.
+* **Personal-info matches no longer pause sessions or hold scenes back.** Personal-info flags
+  counted as misuse: a student who typed something like "the buyer at 412 Elm Street" (the
+  street-address pattern) couldn't move the scene on with that message, and three such
+  messages paused the session. These are still flagged for administrators, but they no longer
+  count towards a pause.
+* **Some confirm dialogs still closed when their action failed** (delete course, remove student,
+  delete a student's conversations, remove the saved AI key). Each one caught its own error, so
+  the dialog never saw the failure. They now stay open and say why.
+* **Results date filter.** The "Started from" date was read as midnight UTC, not local
+  midnight, so the start of the range was shifted by the time-zone offset. Both ends now use
+  the viewer's time zone.
+* **Dialogs.** A dialog no longer moves focus back to its first field when the page behind it
+  re-renders. With a dialog opened from another dialog, Escape now closes only the top one.
+* **AI status** kept the old "consecutive errors" count in the stored record after the
+  connection recovered.
+* **Several workers starting at once** (`WEB_CONCURRENCY=2`, the Docker default) could both try
+  to create the first administrator, and one would crash at start-up. That case is now handled.
+* **`.env.production.example` was missing.** `DEPLOY.md` (Route B) and `docker-compose.yml`
+  tell you to copy it. It's now included.
+
 No database tables changed. Version 2 runs on a version 1 database as it is, and attempts that
 were in progress under version 1 can be continued.
 
