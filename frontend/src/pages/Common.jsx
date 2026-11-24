@@ -34,8 +34,8 @@ export function Login() {
           </form>
           <aside className="login-about">
             <Logo size={56} className="crest" />
-            <h2>Role-Play Scenarios</h2>
-            <p>Role-plays written by your instructors, where you put course material to work.</p>
+            <h2>Scenarium</h2>
+            <p>Role-play scenarios written by your instructors, where you put course material to work.</p>
           </aside>
         </div>
       </main>
